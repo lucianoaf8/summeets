@@ -1,8 +1,18 @@
+"""
+Application configuration using Pydantic Settings.
+Manages environment variables and default settings for Summeets.
+"""
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from pathlib import Path
 
 class Settings(BaseSettings):
+    """
+    Application settings loaded from environment variables and .env file.
+    
+    All settings can be overridden with environment variables using the aliases
+    or the field names in uppercase (e.g., PROVIDER, LLM_PROVIDER).
+    """
     # LLM Configuration
     provider: str = Field("openai", alias="LLM_PROVIDER")
     model: str = Field("gpt-4o-mini", alias="LLM_MODEL")
@@ -42,4 +52,5 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+# Global settings instance - automatically loads from environment and .env file
 SETTINGS = Settings()

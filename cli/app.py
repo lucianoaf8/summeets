@@ -10,6 +10,8 @@ from core.config import SETTINGS
 from core.transcribe import transcribe_audio
 from core.summarize import summarize_transcript
 from core.fsio import get_data_manager
+from core.validation import sanitize_path_input, validate_transcript_file, validate_output_dir, validate_model_name
+from core.exceptions import ValidationError
 
 app = typer.Typer(add_completion=False, help="Summeets - Transcribe and summarize meetings")
 console = Console()
@@ -30,6 +32,15 @@ def cmd_transcribe(
 ):
     """Transcribe audio using Whisper + diarization."""
     try:
+        # Input validation
+        if audio:
+            audio_str = sanitize_path_input(str(audio))
+            audio = Path(audio_str)
+        
+        output_str = sanitize_path_input(str(output_dir))
+        output_dir = Path(output_str)
+        validate_output_dir(output_dir)
+        
         json_path, srt_path, audit_path = transcribe_audio(
             audio_path=audio,
             output_dir=output_dir
@@ -38,6 +49,9 @@ def cmd_transcribe(
         console.print(f"  JSON: [cyan]{json_path}[/cyan]")
         console.print(f"  SRT: [cyan]{srt_path}[/cyan]")
         console.print(f"  Audit: [cyan]{audit_path}[/cyan]")
+    except ValidationError as e:
+        console.print(f"[red]Validation Error: {e}[/red]")
+        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -52,11 +66,27 @@ def cmd_summarize(
     max_tokens: int = typer.Option(3000, "--max-tokens", help="Max output tokens")
 ):
     """Summarize meeting transcript using LLM."""
-    if not transcript.exists():
-        console.print(f"[red]Transcript not found: {transcript}[/red]")
-        raise typer.Exit(1)
-    
     try:
+        # Input validation
+        transcript_str = sanitize_path_input(str(transcript))
+        transcript = Path(transcript_str)
+        validate_transcript_file(transcript)
+        
+        # Validate provider options
+        if provider not in ["openai", "anthropic"]:
+            raise ValidationError(f"Invalid provider '{provider}'. Must be 'openai' or 'anthropic'")
+        
+        # Validate model name
+        model = validate_model_name(model)
+        
+        # Validate numeric parameters
+        if chunk_seconds <= 0:
+            raise ValidationError("Chunk seconds must be positive")
+        if cod_passes <= 0:
+            raise ValidationError("CoD passes must be positive")
+        if max_tokens <= 0:
+            raise ValidationError("Max tokens must be positive")
+        
         md_path, json_path = summarize_transcript(
             transcript_path=transcript,
             provider=provider,
@@ -68,6 +98,9 @@ def cmd_summarize(
         console.print(f"[green]✓[/green] Summary complete:")
         console.print(f"  Markdown: [cyan]{md_path}[/cyan]")
         console.print(f"  JSON: [cyan]{json_path}[/cyan]")
+    except ValidationError as e:
+        console.print(f"[red]Validation Error: {e}[/red]")
+        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -82,22 +115,34 @@ def cmd_process(
     """Complete pipeline: transcribe and summarize audio."""
     console.print("[bold]Starting complete processing pipeline[/bold]")
     
-    # Transcribe
-    console.print("\n[yellow]Step 1/2:[/yellow] Transcribing audio...")
     try:
+        # Input validation
+        if audio:
+            audio_str = sanitize_path_input(str(audio))
+            audio = Path(audio_str)
+        
+        output_str = sanitize_path_input(str(output_dir))
+        output_dir = Path(output_str)
+        validate_output_dir(output_dir)
+        
+        # Validate provider options
+        if provider not in ["openai", "anthropic"]:
+            raise ValidationError(f"Invalid provider '{provider}'. Must be 'openai' or 'anthropic'")
+        
+        # Validate model name
+        model = validate_model_name(model)
+        
+        # Transcribe
+        console.print("\n[yellow]Step 1/2:[/yellow] Transcribing audio...")
         json_path, srt_path, audit_path = transcribe_audio(
             audio_path=audio,
             output_dir=output_dir
         )
         console.print(f"[green]✓[/green] Transcription complete")
         console.print(f"  JSON: [cyan]{json_path}[/cyan]")
-    except Exception as e:
-        console.print(f"[red]Transcription failed: {e}[/red]")
-        raise typer.Exit(1)
-    
-    # Summarize
-    console.print("\n[yellow]Step 2/2:[/yellow] Summarizing transcript...")
-    try:
+        
+        # Summarize
+        console.print("\n[yellow]Step 2/2:[/yellow] Summarizing transcript...")
         md_path, summary_json = summarize_transcript(
             transcript_path=json_path,
             provider=provider,
@@ -106,11 +151,15 @@ def cmd_process(
         console.print(f"[green]✓[/green] Summary complete:")
         console.print(f"  Markdown: [cyan]{md_path}[/cyan]")
         console.print(f"  JSON: [cyan]{summary_json}[/cyan]")
-    except Exception as e:
-        console.print(f"[red]Summarization failed: {e}[/red]")
+        
+        console.print("\n[bold green]✓ Pipeline complete![/bold green]")
+        
+    except ValidationError as e:
+        console.print(f"[red]Validation Error: {e}[/red]")
         raise typer.Exit(1)
-    
-    console.print("\n[bold green]✓ Pipeline complete![/bold green]")
+    except Exception as e:
+        console.print(f"[red]Pipeline failed: {e}[/red]")
+        raise typer.Exit(1)
 
 @app.command("config")
 def cmd_config():

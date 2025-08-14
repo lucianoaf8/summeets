@@ -1,7 +1,9 @@
 import subprocess
 import shlex
 import logging
+import json
 from pathlib import Path
+from typing import Dict, Tuple
 from ..config import SETTINGS
 
 log = logging.getLogger(__name__)
@@ -74,3 +76,70 @@ def ensure_wav16k_mono(input_path: Path) -> Path:
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         log.warning(f"FFmpeg conversion failed: {e}. Using original file.")
         return input_path
+
+
+def run_cmd(cmd: list) -> Tuple[int, str, str]:
+    """
+    Run a command and return the result.
+    
+    Args:
+        cmd: Command as list of strings
+        
+    Returns:
+        Tuple of (returncode, stdout, stderr)
+    """
+    log.debug(f"RUN: {' '.join(cmd)}")
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    out, err = proc.communicate()
+    log.debug(f"EXIT {proc.returncode}: out={len(out or '')}, err={len(err or '')}")
+    return proc.returncode, out, err
+
+
+def ffprobe_info(path: Path) -> Dict:
+    """
+    Get audio file information using ffprobe.
+    
+    Args:
+        path: Path to audio file
+        
+    Returns:
+        Dictionary with audio metadata
+    """
+    cmd = [
+        SETTINGS.ffprobe_bin,
+        "-v", "quiet",
+        "-print_format", "json",
+        "-show_format",
+        "-show_streams",
+        str(path)
+    ]
+    
+    returncode, stdout, stderr = run_cmd(cmd)
+    
+    if returncode != 0:
+        log.warning(f"ffprobe failed for {path}: {stderr}")
+        return {}
+    
+    try:
+        data = json.loads(stdout)
+        
+        # Extract audio stream info
+        audio_streams = [s for s in data.get("streams", []) if s.get("codec_type") == "audio"]
+        if not audio_streams:
+            return {}
+        
+        stream = audio_streams[0]  # Use first audio stream
+        format_info = data.get("format", {})
+        
+        return {
+            "duration": float(format_info.get("duration", 0)),
+            "bit_rate": int(format_info.get("bit_rate", 0)),
+            "sample_rate": int(stream.get("sample_rate", 0)),
+            "channels": int(stream.get("channels", 0)),
+            "codec": stream.get("codec_name", ""),
+            "size": int(format_info.get("size", 0))
+        }
+        
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
+        log.warning(f"Failed to parse ffprobe output for {path}: {e}")
+        return {}

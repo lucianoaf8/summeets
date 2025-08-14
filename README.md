@@ -7,7 +7,7 @@ Production-grade monorepo for transcribing and summarizing meetings with speaker
 * **Audio Processing**: FFmpeg-based normalization, extraction, and format conversion
 * **Transcription**: Replicate's `thomasmol/whisper-diarization` (Whisper v3 + Pyannote) for speaker-aware transcription
 * **Summarization**: Map-reduce + Chain-of-Density summarization with OpenAI GPT-4o or Anthropic Claude
-* **Dual Interface**: Full-featured CLI (`summeets`) and GUI (`summeets-gui`) sharing the same core
+* **Dual Interface**: Full-featured CLI (`summeets`) and GUI (`summeets gui`) sharing the same core
 * **Production Ready**: Structured logging, configuration management, error handling
 
 ### Model Support
@@ -94,44 +94,25 @@ summeets process /path/to/meeting.m4a --provider anthropic --model claude-3-5-so
 ```bash
 # 1. Transcribe audio
 summeets transcribe /path/to/audio.m4a
-# → Creates out/audio.json
+# → Creates out/audio.json (or data/output/ if using DataManager)
 
 # 2. Summarize transcript
 summeets summarize out/audio.json --provider openai --model gpt-4o
 
-# 3. Audio processing
-summeets normalize input.mkv output.mkv
-summeets extract input.mkv output.m4a --codec aac
-summeets probe input.mkv
+# 3. View configuration
+summeets config
 ```
 
-#### Audio Processing Examples
-
-**Loudness normalize without re-encoding video:**
-```powershell
-summeets normalize `
-  "C:\recordings\Workshop.mkv" `
-  "C:\recordings\Workshop_louder.mkv"
-```
-
-**Extract first audio stream, lossless:**
-```powershell
-summeets extract `
-  "C:\recordings\Workshop_louder.mkv" `
-  "C:\recordings\Workshop_audio.mka" --codec copy
-```
-
-**Re-encode to AAC or MP3:**
-```powershell
-summeets extract "input.mkv" "output.m4a" --codec aac
-summeets extract "input.mkv" "output.mp3" --codec mp3
-```
 
 ### GUI Interface
 
 Launch the GUI with:
 ```bash
-summeets-gui
+summeets gui
+# or
+python main.py gui
+# or (default behavior)
+python main.py
 ```
 
 The GUI provides an intuitive interface for:
@@ -146,6 +127,8 @@ View current settings:
 ```bash
 summeets config
 ```
+
+The configuration shows current LLM provider settings, output directories, and FFmpeg binary paths.
 
 ## Architecture
 
@@ -163,7 +146,7 @@ summeets/
 │  ├─ transcribe/pipeline.py # Transcription logic
 │  └─ summarize/pipeline.py  # Summarization logic
 ├─ cli/app.py               # Typer CLI interface
-├─ gui/app.py               # Textual GUI interface
+├─ gui/app.py               # tkinter GUI interface
 ├─ data/                    # Organized data storage
 │  ├─ input/                # Input files (by date)
 │  ├─ output/               # Processing results (by date/type)
