@@ -14,7 +14,7 @@ from core.audio.selection import (
     SUPPORTED_EXTS,
     FORMAT_SCORES
 )
-from core.exceptions import ValidationError
+from core.utils.exceptions import ValidationError
 
 
 class TestGetAudioFiles:

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
-from .models import (
+from ..models import (
     ProcessingResults, TranscriptionJob, SummarizationJob, 
     ProcessingPipeline, AudioMetadata, FileType
 )

@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Summeets</title>
+    <style>
+        :root {
+            --primary-bg: #1f2937;
+            --secondary-bg: #374151;
+            --accent-bg: #111827;
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --border-color: #4b5563;
+            --blue-500: #3b82f6;
+            --blue-600: #2563eb;
+            --blue-700: #1d4ed8;
+            --green-500: #10b981;
+            --red-500: #ef4444;
+            --yellow-500: #f59e0b;
+            --shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="light"] {
+            --primary-bg: #f9fafb;
+            --secondary-bg: #ffffff;
+            --accent-bg: #f3f4f6;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --border-color: #d1d5db;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--primary-bg);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Header - More compact */
+        .header {
+            background: var(--secondary-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo-icon {
+            width: 1.75rem;
+            height: 1.75rem;
+            background: linear-gradient(135deg, var(--blue-500), #8b5cf6);
+            border-radius: 0.375rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.875rem;
+        }
+
+        .app-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 0.375rem;
+            height: 0.375rem;
+            background: var(--green-500);
+            border-radius: 50%;
+        }
+
+        /* Main Layout */
+        .main-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            height: calc(100vh - 60px);
+        }
+
+        /* Sidebar - More compact */
+        .sidebar {
+            width: 14rem;
+            background: var(--secondary-bg);
+            border-right: 1px solid var(--border-color);
+            padding: 0.75rem;
+            flex-shrink: 0;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-bottom: 0.25rem;
+            border: none;
+            background: none;
+            color: var(--text-primary);
+            width: 100%;
+            text-align: left;
+            font-size: 0.8rem;
+        }
+
+        .nav-item:hover {
+            background: var(--accent-bg);
+        }
+
+        .nav-item.active {
+            background: var(--blue-600);
+            color: white;
+        }
+
+        .nav-icon {
+            width: 1rem;
+            height: 1rem;
+        }
+
+        /* Content Area - No scroll, compact padding */
+        .content-area {
+            flex: 1;
+            padding: 1rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Dashboard Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto 1fr;
+            gap: 1rem;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .file-section {
+            grid-column: 1 / -1;
+            grid-row: 1;
+        }
+
+        .workflow-section {
+            grid-column: 1 / -1;
+            grid-row: 2;
+        }
+
+        .actions-section {
+            grid-column: 1;
+            grid-row: 3;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .jobs-section {
+            grid-column: 2;
+            grid-row: 3;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* File Selection - Compact */
+        .file-selection-card {
+            background: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+        }
+
+        .file-type-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .file-type-btn {
+            padding: 0.75rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+            min-height: 4.5rem;
+            transition: all 0.2s;
+            background: var(--accent-bg);
+            border: 2px dashed var(--border-color);
+            border-radius: 0.5rem;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 0.75rem;
+            position: relative;
+        }
+
+        .file-type-btn.active {
+            background: var(--blue-600);
+            color: white;
+            border-color: var(--blue-600);
+            border-style: solid;
+        }
+
+        .file-type-btn:hover:not(.active) {
+            background: var(--secondary-bg);
+            border-color: var(--blue-500);
+            transform: translateY(-1px);
+        }
+
+        .file-type-btn.drag-over {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: var(--blue-500);
+            border-style: solid;
+            transform: scale(1.02);
+        }
+
+        .drop-zone-btn {
+            /* Additional styling for drop zone functionality */
+        }
+
+        /* Selected File Display */
+        .selected-file {
+            background: var(--accent-bg);
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        /* Workflow Configuration - Horizontal Layout */
+        .workflow-card {
+            background: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            height: fit-content;
+        }
+
+        .workflow-steps {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .workflow-step {
+            background: var(--accent-bg);
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .step-config {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .workflow-step.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        /* Compact Forms */
+        .form-group {
+            margin-bottom: 0.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 0.375rem;
+            background: var(--primary-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.25rem;
+            color: var(--text-primary);
+            font-size: 0.75rem;
+        }
+
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: var(--blue-500);
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: var(--blue-600);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--blue-700);
+        }
+
+        .btn-primary:disabled {
+            background: var(--text-secondary);
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--accent-bg);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--secondary-bg);
+        }
+
+        /* Start Processing Button */
+        .start-processing {
+            text-align: center;
+            margin-top: 0.75rem;
+        }
+
+        .start-processing .btn {
+            padding: 0.75rem 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        /* Quick Actions - Compact Grid */
+        .quick-actions {
+            background: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .quick-actions-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+            flex: 1;
+        }
+
+        .quick-action-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: var(--accent-bg);
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 0.8rem;
+        }
+
+        .quick-action-item:hover {
+            background: var(--border-color);
+        }
+
+        .quick-action-icon {
+            font-size: 1.25rem;
+        }
+
+        /* Recent Jobs - Compact */
+        .recent-jobs {
+            background: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .job-list {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .job-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.75rem;
+        }
+
+        .job-item:last-child {
+            border-bottom: none;
+        }
+
+        .job-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .job-status {
+            width: 0.5rem;
+            height: 0.5rem;
+            border-radius: 50%;
+        }
+
+        .status-completed { background: var(--green-500); }
+        .status-failed { background: var(--red-500); }
+        .status-processing { background: var(--blue-500); }
+        .status-pending { background: var(--yellow-500); }
+
+        /* Section Headers */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            flex-shrink: 0;
+        }
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            position: relative;
+            width: 2.5rem;
+            height: 1.25rem;
+            background: var(--accent-bg);
+            border-radius: 0.625rem;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .theme-toggle.active {
+            background: var(--blue-600);
+        }
+
+        .theme-toggle-slider {
+            position: absolute;
+            top: 0.125rem;
+            left: 0.125rem;
+            width: 1rem;
+            height: 1rem;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+
+        .theme-toggle.active .theme-toggle-slider {
+            transform: translateX(1.25rem);
+        }
+
+        /* Hidden elements */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Checkboxes */
+        input[type="checkbox"] {
+            width: 0.875rem;
+            height: 0.875rem;
+            accent-color: var(--blue-500);
+        }
+
+        /* Icons (using Unicode symbols as fallback) */
+        .icon-file::before { content: "🎵"; }
+        .icon-settings::before { content: "⚙️"; }
+        .icon-history::before { content: "📋"; }
+        .icon-processing::before { content: "⚡"; }
+        .icon-dashboard::before { content: "📊"; }
+        .icon-upload::before { content: "⬆️"; }
+        .icon-download::before { content: "⬇️"; }
+        .icon-folder::before { content: "📁"; }
+        .icon-eye::before { content: "👁️"; }
+        .icon-x::before { content: "❌"; }
+        .icon-check::before { content: "✅"; }
+        .icon-alert::before { content: "⚠️"; }
+        .icon-loader::before { content: "🔄"; }
+
+        /* Tab Content */
+        .tab-content {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .tab-content.hidden {
+            display: none;
+        }
+
+        /* Processing Tab Styles */
+        .processing-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+        }
+
+        .no-job-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+
+        /* Current Job Card */
+        .current-job-card {
+            background: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .job-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .progress-container {
+            margin: 0.75rem 0;
+        }
+
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 0.5rem;
+            background: var(--accent-bg);
+            border-radius: 0.25rem;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--blue-500);
+            transition: width 0.3s;
+        }
+
+        .progress-fill.completed {
+            background: var(--green-500);
+        }
+
+        .progress-fill.failed {
+            background: var(--red-500);
+        }
+
+        .job-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            font-size: 0.8rem;
+        }
+
+        .job-detail-item {
+            color: var(--text-secondary);
+        }
+
+        .job-detail-item p {
+            color: var(--text-primary);
+            margin-top: 0.25rem;
+        }
+
+        /* Logs */
+        .logs-card {
+            background: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1rem;
+        }
+
+        .logs-container {
+            background: var(--accent-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.7rem;
+            margin-top: 0.5rem;
+        }
+
+        .log-line {
+            margin-bottom: 0.25rem;
+            word-wrap: break-word;
+        }
+
+        .log-line.stdout {
+            color: var(--text-primary);
+        }
+
+        .log-line.stderr {
+            color: var(--red-500);
+        }
+
+        /* History and Settings Styles */
+        .history-content, .settings-content {
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        .settings-card {
+            background: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto auto;
+            }
+            
+            .file-section {
+                grid-column: 1;
+                grid-row: 1;
+            }
+            
+            .workflow-section {
+                grid-column: 1;
+                grid-row: 2;
+            }
+            
+            .actions-section {
+                grid-column: 1;
+                grid-row: 3;
+            }
+            
+            .jobs-section {
+                grid-column: 1;
+                grid-row: 4;
+            }
+            
+            .content-area {
+                overflow-y: auto;
+            }
+        }
+
+        /* Scrollbar styling for overflow areas */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--accent-bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">S</div>
+                <h1 class="app-title">Summeets</h1>
+            </div>
+            <div class="header-controls">
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span>Ready</span>
+                </div>
+                <button class="theme-toggle" id="themeToggle">
+                    <div class="theme-toggle-slider"></div>
+                </button>
+            </div>
+        </header>
+
+        <div class="main-layout">
+            <!-- Sidebar -->
+            <nav class="sidebar">
+                <button class="nav-item active" data-tab="dashboard">
+                    <span class="nav-icon icon-dashboard"></span>
+                    Dashboard
+                </button>
+                <button class="nav-item" data-tab="processing">
+                    <span class="nav-icon icon-processing"></span>
+                    Processing
+                </button>
+                <button class="nav-item" data-tab="history">
+                    <span class="nav-icon icon-history"></span>
+                    History
+                </button>
+                <button class="nav-item" data-tab="settings">
+                    <span class="nav-icon icon-settings"></span>
+                    Settings
+                </button>
+            </nav>
+
+            <!-- Content Area -->
+            <main class="content-area">
+                <!-- Dashboard Tab -->
+                <div id="dashboard-tab" class="tab-content">
+                    <div class="dashboard-grid">
+                        <!-- File Selection Section -->
+                        <div class="file-section">
+                            <div class="file-selection-card">
+                                <div class="section-header">
+                                    <h2 class="section-title">Select Input File</h2>
+                                </div>
+                                
+                                <!-- File Type Selection with Drag & Drop -->
+                                <div class="file-type-grid">
+                                    <div class="file-type-btn drop-zone-btn" data-type="video" id="selectVideoBtn">
+                                        <span style="font-size: 1.5rem;">🎥</span>
+                                        <div style="font-weight: 500;">Video</div>
+                                        <small style="color: var(--text-secondary);">Drop video or click</small>
+                                        <small style="color: var(--text-secondary); font-size: 0.65rem;">MP4, MKV, AVI, MOV</small>
+                                    </div>
+                                    <div class="file-type-btn drop-zone-btn" data-type="audio" id="selectAudioBtn">
+                                        <span style="font-size: 1.5rem;">🎵</span>
+                                        <div style="font-weight: 500;">Audio</div>
+                                        <small style="color: var(--text-secondary);">Drop audio or click</small>
+                                        <small style="color: var(--text-secondary); font-size: 0.65rem;">M4A, MP3, WAV, FLAC</small>
+                                    </div>
+                                    <div class="file-type-btn drop-zone-btn" data-type="transcript" id="selectTranscriptBtn">
+                                        <span style="font-size: 1.5rem;">📄</span>
+                                        <div style="font-weight: 500;">Transcript</div>
+                                        <small style="color: var(--text-secondary);">Drop file or click</small>
+                                        <small style="color: var(--text-secondary); font-size: 0.65rem;">JSON, TXT</small>
+                                    </div>
+                                </div>
+                                
+                                <!-- Selected File Display -->
+                                <div id="selectedFileDisplay" class="selected-file hidden">
+                                    <span id="selectedFileIcon">📁</span>
+                                    <div style="flex: 1;">
+                                        <div id="selectedFileName" style="font-weight: 500;"></div>
+                                        <div id="selectedFileType" style="color: var(--text-secondary);"></div>
+                                    </div>
+                                    <button class="btn btn-secondary" id="changeFileBtn">Change</button>
+                                </div>
+                                
+                                <input type="file" id="videoInput" accept=".mp4,.mkv,.avi,.mov,.wmv,.flv,.webm,.m4v" style="display: none;">
+                                <input type="file" id="audioInput" accept=".m4a,.flac,.wav,.mka,.ogg,.mp3,.webm" style="display: none;">
+                                <input type="file" id="transcriptInput" accept=".json,.txt" style="display: none;">
+                            </div>
+                        </div>
+                        
+                        <!-- Workflow Configuration -->
+                        <div class="workflow-section">
+                            <div class="workflow-card">
+                                <div class="section-header">
+                                    <h2 class="section-title">Workflow Steps</h2>
+                                </div>
+                                
+                                <div class="workflow-steps">
+                                    <!-- Extract Audio Step -->
+                                    <div class="workflow-step" id="extractAudioStep">
+                                        <div class="step-header">
+                                            <input type="checkbox" id="enableExtractAudio" checked>
+                                            <label for="enableExtractAudio">Extract Audio</label>
+                                        </div>
+                                        <div class="step-config">
+                                            <div class="form-group">
+                                                <label class="form-label">Format</label>
+                                                <select class="form-select" id="audioFormat">
+                                                    <option value="m4a">M4A</option>
+                                                    <option value="mp3">MP3</option>
+                                                    <option value="wav">WAV</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label">Quality</label>
+                                                <select class="form-select" id="audioQuality">
+                                                    <option value="high">High</option>
+                                                    <option value="medium">Medium</option>
+                                                    <option value="low">Low</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Process Audio Step -->
+                                    <div class="workflow-step" id="processAudioStep">
+                                        <div class="step-header">
+                                            <input type="checkbox" id="enableProcessAudio" checked>
+                                            <label for="enableProcessAudio">Process Audio</label>
+                                        </div>
+                                        <div class="step-config">
+                                            <label style="font-size: 0.7rem; display: flex; align-items: center; gap: 0.25rem;">
+                                                <input type="checkbox" id="increaseVolume">
+                                                <span>Increase Volume</span>
+                                            </label>
+                                            <label style="font-size: 0.7rem; display: flex; align-items: center; gap: 0.25rem;">
+                                                <input type="checkbox" id="normalizeAudio" checked>
+                                                <span>Normalize Audio</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Transcribe Step -->
+                                    <div class="workflow-step" id="transcribeStep">
+                                        <div class="step-header">
+                                            <input type="checkbox" id="enableTranscribe" checked>
+                                            <label for="enableTranscribe">Transcribe</label>
+                                        </div>
+                                        <div class="step-config">
+                                            <div class="form-group">
+                                                <label class="form-label">Language</label>
+                                                <select class="form-select" id="transcribeLanguage">
+                                                    <option value="auto">Auto-detect</option>
+                                                    <option value="en">English</option>
+                                                    <option value="es">Spanish</option>
+                                                    <option value="fr">French</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Summarize Step -->
+                                    <div class="workflow-step" id="summarizeStep">
+                                        <div class="step-header">
+                                            <input type="checkbox" id="enableSummarize" checked>
+                                            <label for="enableSummarize">Summarize</label>
+                                        </div>
+                                        <div class="step-config">
+                                            <div class="form-group">
+                                                <label class="form-label">Template</label>
+                                                <select class="form-select" id="summaryTemplate">
+                                                    <option value="Default">Default</option>
+                                                    <option value="Meeting Notes">Meeting</option>
+                                                    <option value="Executive Summary">Executive</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="start-processing">
+                                    <button class="btn btn-primary" id="startProcessingBtn" disabled>
+                                        <span class="icon-processing"></span>
+                                        Start Processing
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Actions -->
+                        <div class="actions-section">
+                            <div class="quick-actions">
+                                <div class="section-header">
+                                    <h2 class="section-title">Quick Actions</h2>
+                                </div>
+                                <div class="quick-actions-grid">
+                                    <div class="quick-action-item" data-action="transcribe">
+                                        <div class="quick-action-icon" style="color: var(--blue-500);">🎵</div>
+                                        <div>
+                                            <div style="font-weight: 500;">Transcribe Only</div>
+                                            <div style="font-size: 0.7rem; color: var(--text-secondary);">Generate transcript with speaker labels</div>
+                                        </div>
+                                    </div>
+                                    <div class="quick-action-item" data-action="summarize">
+                                        <div class="quick-action-icon" style="color: var(--green-500);">⚡</div>
+                                        <div>
+                                            <div style="font-weight: 500;">Summarize Only</div>
+                                            <div style="font-size: 0.7rem; color: var(--text-secondary);">Summarize existing transcript</div>
+                                        </div>
+                                    </div>
+                                    <div class="quick-action-item" data-action="settings">
+                                        <div class="quick-action-icon" style="color: var(--text-secondary);">⚙️</div>
+                                        <div>
+                                            <div style="font-weight: 500;">Configure</div>
+                                            <div style="font-size: 0.7rem; color: var(--text-secondary);">API keys and settings</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Jobs -->
+                        <div class="jobs-section">
+                            <div class="recent-jobs">
+                                <div class="section-header">
+                                    <h2 class="section-title">Recent Jobs</h2>
+                                    <button class="btn btn-secondary" id="viewAllJobsBtn" style="font-size: 0.7rem; padding: 0.25rem 0.5rem;">View All</button>
+                                </div>
+                                <div class="job-list" id="recentJobsList">
+                                    <!-- Sample jobs -->
+                                    <div class="job-item">
+                                        <div class="job-info">
+                                            <div class="job-status status-completed"></div>
+                                            <div>
+                                                <div style="font-weight: 500;">quarterly-review.m4a</div>
+                                                <div style="color: var(--text-secondary);">Process • 2m 30s</div>
+                                            </div>
+                                        </div>
+                                        <div style="color: var(--text-secondary);">1h ago</div>
+                                    </div>
+                                    <div class="job-item">
+                                        <div class="job-info">
+                                            <div class="job-status status-failed"></div>
+                                            <div>
+                                                <div style="font-weight: 500;">client-meeting.wav</div>
+                                                <div style="color: var(--text-secondary);">Transcribe • Failed</div>
+                                            </div>
+                                        </div>
+                                        <div style="color: var(--text-secondary);">3h ago</div>
+                                    </div>
+                                    <div class="job-item">
+                                        <div class="job-info">
+                                            <div class="job-status status-processing"></div>
+                                            <div>
+                                                <div style="font-weight: 500;">demo-video.mp4</div>
+                                                <div style="color: var(--text-secondary);">Workflow • 45%</div>
+                                            </div>
+                                        </div>
+                                        <div style="color: var(--text-secondary);">Running</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Processing Tab -->
+                <div id="processing-tab" class="tab-content hidden">
+                    <div id="currentJobCard" class="hidden">
+                        <div class="current-job-card">
+                            <div class="job-header">
+                                <h2 id="currentJobTitle" class="job-title"></h2>
+                                <button class="btn btn-secondary" id="cancelJobBtn">
+                                    <span class="icon-x"></span>
+                                    Cancel
+                                </button>
+                            </div>
+                            <div id="currentJobProgress"></div>
+                            <div class="job-details">
+                                <div class="job-detail-item">
+                                    <span>Started:</span>
+                                    <p id="currentJobStartTime"></p>
+                                </div>
+                                <div class="job-detail-item">
+                                    <span>Type:</span>
+                                    <p id="currentJobType"></p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="logs-card">
+                            <h3 style="font-weight: 500; margin-bottom: 0.5rem;">Live Output</h3>
+                            <div class="logs-container" id="jobLogs"></div>
+                        </div>
+                    </div>
+
+                    <div id="noActiveJob" class="processing-content">
+                        <div class="no-job-icon">📁</div>
+                        <h3 style="font-size: 1.125rem; font-weight: 500; margin-bottom: 0.5rem;">No Active Jobs</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Start a new job to see progress here</p>
+                        <button class="btn btn-primary" onclick="switchTab('dashboard')">Go to Dashboard</button>
+                    </div>
+                </div>
+
+                <!-- History Tab -->
+                <div id="history-tab" class="tab-content hidden">
+                    <div class="history-content">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <h2 style="font-size: 1.25rem; font-weight: 600;">Job History</h2>
+                            <button class="btn btn-secondary" id="refreshHistoryBtn">
+                                <span class="icon-loader"></span>
+                                Refresh
+                            </button>
+                        </div>
+                        <div id="jobHistoryList">
+                            <!-- Job history will be populated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div id="settings-tab" class="tab-content hidden">
+                    <div class="settings-content">
+                        <div class="settings-card">
+                            <h2 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 1rem;">LLM Configuration</h2>
+                            <div class="settings-grid">
+                                <div class="form-group">
+                                    <label class="form-label">Provider</label>
+                                    <select class="form-select" id="llmProvider">
+                                        <option value="openai">OpenAI</option>
+                                        <option value="anthropic">Anthropic</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Model</label>
+                                    <select class="form-select" id="llmModel">
+                                        <option value="gpt-4o">GPT-4o</option>
+                                        <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" id="apiKeyLabel">OpenAI API Key</label>
+                                    <input type="password" class="form-input" id="apiKey" placeholder="sk-...">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Replicate Token</label>
+                                    <input type="password" class="form-input" id="replicateToken" placeholder="r8_...">
+                                </div>
+                            </div>
+                            <button class="btn btn-primary" id="saveConfigBtn" style="margin-top: 0.75rem;">Save Configuration</button>
+                        </div>
+
+                        <div class="settings-card">
+                            <h2 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 1rem;">Processing Settings</h2>
+                            <div class="settings-grid">
+                                <div class="form-group">
+                                    <label class="form-label">Max Output Tokens</label>
+                                    <input type="number" class="form-input" id="maxTokens" value="3000">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Chunk Seconds</label>
+                                    <input type="number" class="form-input" id="chunkSeconds" value="1800">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-card">
+                            <h2 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 1rem;">Appearance</h2>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>Dark Mode</span>
+                                <button class="theme-toggle" id="settingsThemeToggle">
+                                    <div class="theme-toggle-slider"></div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // Application State
+        const AppState = {
+            jobs: new Map(),
+            config: {
+                llmProvider: 'openai',
+                llmModel: 'gpt-4o-mini',
+                openaiApiKey: '',
+                anthropicApiKey: '',
+                replicateApiToken: '',
+                maxTokens: 3000,
+                chunkSeconds: 1800
+            },
+            currentJob: null,
+            isDarkMode: true,
+            activeTab: 'dashboard',
+            selectedFile: null,
+            selectedFileType: null,
+            workflowConfig: {
+                extractAudio: true,
+                processAudio: true,
+                transcribe: true,
+                summarize: true,
+                audioFormat: 'm4a',
+                audioQuality: 'high',
+                increaseVolume: false,
+                normalizeAudio: true,
+                transcribeLanguage: 'auto',
+                summaryTemplate: 'Default'
+            }
+        };
+
+        // DOM Elements
+        const elements = {
+            selectVideoBtn: document.getElementById('selectVideoBtn'),
+            selectAudioBtn: document.getElementById('selectAudioBtn'),
+            selectTranscriptBtn: document.getElementById('selectTranscriptBtn'),
+            videoInput: document.getElementById('videoInput'),
+            audioInput: document.getElementById('audioInput'),
+            transcriptInput: document.getElementById('transcriptInput'),
+            selectedFileDisplay: document.getElementById('selectedFileDisplay'),
+            selectedFileName: document.getElementById('selectedFileName'),
+            selectedFileType: document.getElementById('selectedFileType'),
+            selectedFileIcon: document.getElementById('selectedFileIcon'),
+            changeFileBtn: document.getElementById('changeFileBtn'),
+            enableExtractAudio: document.getElementById('enableExtractAudio'),
+            enableProcessAudio: document.getElementById('enableProcessAudio'),
+            enableTranscribe: document.getElementById('enableTranscribe'),
+            enableSummarize: document.getElementById('enableSummarize'),
+            audioFormat: document.getElementById('audioFormat'),
+            audioQuality: document.getElementById('audioQuality'),
+            increaseVolume: document.getElementById('increaseVolume'),
+            normalizeAudio: document.getElementById('normalizeAudio'),
+            transcribeLanguage: document.getElementById('transcribeLanguage'),
+            summaryTemplate: document.getElementById('summaryTemplate'),
+            startProcessingBtn: document.getElementById('startProcessingBtn'),
+            themeToggle: document.getElementById('themeToggle'),
+            settingsThemeToggle: document.getElementById('settingsThemeToggle'),
+            recentJobsList: document.getElementById('recentJobsList'),
+            currentJobCard: document.getElementById('currentJobCard'),
+            noActiveJob: document.getElementById('noActiveJob'),
+            currentJobTitle: document.getElementById('currentJobTitle'),
+            currentJobProgress: document.getElementById('currentJobProgress'),
+            currentJobStartTime: document.getElementById('currentJobStartTime'),
+            currentJobType: document.getElementById('currentJobType'),
+            jobLogs: document.getElementById('jobLogs'),
+            cancelJobBtn: document.getElementById('cancelJobBtn'),
+            llmProvider: document.getElementById('llmProvider'),
+            llmModel: document.getElementById('llmModel'),
+            apiKey: document.getElementById('apiKey'),
+            apiKeyLabel: document.getElementById('apiKeyLabel'),
+            replicateToken: document.getElementById('replicateToken'),
+            maxTokens: document.getElementById('maxTokens'),
+            chunkSeconds: document.getElementById('chunkSeconds'),
+            saveConfigBtn: document.getElementById('saveConfigBtn'),
+            viewAllJobsBtn: document.getElementById('viewAllJobsBtn'),
+            refreshHistoryBtn: document.getElementById('refreshHistoryBtn')
+        };
+
+        // Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            updateUI();
+        });
+
+        function setupEventListeners() {
+            // Tab navigation
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const tab = item.dataset.tab;
+                    switchTab(tab);
+                });
+            });
+
+            // Theme toggle
+            elements.themeToggle.addEventListener('click', toggleTheme);
+            elements.settingsThemeToggle.addEventListener('click', toggleTheme);
+
+            // File type selection
+            elements.selectVideoBtn.addEventListener('click', () => selectFileType('video'));
+            elements.selectAudioBtn.addEventListener('click', () => selectFileType('audio'));
+            elements.selectTranscriptBtn.addEventListener('click', () => selectFileType('transcript'));
+
+            // File inputs
+            elements.videoInput.addEventListener('change', (e) => handleFileInput(e, 'video'));
+            elements.audioInput.addEventListener('change', (e) => handleFileInput(e, 'audio'));
+            elements.transcriptInput.addEventListener('change', (e) => handleFileInput(e, 'transcript'));
+
+            // Change file button
+            elements.changeFileBtn.addEventListener('click', clearSelectedFile);
+
+            // Workflow step checkboxes
+            elements.enableExtractAudio.addEventListener('change', updateWorkflowSteps);
+            elements.enableProcessAudio.addEventListener('change', updateWorkflowSteps);
+            elements.enableTranscribe.addEventListener('change', updateWorkflowSteps);
+            elements.enableSummarize.addEventListener('change', updateWorkflowSteps);
+
+            // Workflow configuration changes
+            elements.audioFormat.addEventListener('change', updateWorkflowConfig);
+            elements.audioQuality.addEventListener('change', updateWorkflowConfig);
+            elements.increaseVolume.addEventListener('change', updateWorkflowConfig);
+            elements.normalizeAudio.addEventListener('change', updateWorkflowConfig);
+            elements.transcribeLanguage.addEventListener('change', updateWorkflowConfig);
+            elements.summaryTemplate.addEventListener('change', updateWorkflowConfig);
+
+            // Start processing
+            elements.startProcessingBtn.addEventListener('click', startProcessing);
+
+            // Drag and drop
+            setupDragAndDrop();
+
+            // Quick actions
+            document.querySelectorAll('.quick-action-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const action = item.dataset.action;
+                    if (action === 'settings') {
+                        switchTab('settings');
+                    } else {
+                        switchTab('processing');
+                    }
+                });
+            });
+
+            // Configuration
+            elements.llmProvider.addEventListener('change', updateModelOptions);
+            elements.saveConfigBtn.addEventListener('click', saveConfiguration);
+            elements.cancelJobBtn.addEventListener('click', cancelCurrentJob);
+
+            // History actions
+            elements.viewAllJobsBtn.addEventListener('click', () => switchTab('history'));
+            elements.refreshHistoryBtn.addEventListener('click', () => updateUI());
+        }
+
+        function setupDragAndDrop() {
+            const fileTypeButtons = [elements.selectVideoBtn, elements.selectAudioBtn, elements.selectTranscriptBtn];
+            
+            fileTypeButtons.forEach(button => {
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    button.addEventListener(eventName, (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }, false);
+                });
+
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    button.addEventListener(eventName, () => {
+                        button.classList.add('drag-over');
+                    });
+                });
+
+                ['dragleave', 'drop'].forEach(eventName => {
+                    button.addEventListener(eventName, () => {
+                        button.classList.remove('drag-over');
+                    });
+                });
+
+                button.addEventListener('drop', (e) => {
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        const file = files[0];
+                        const fileType = button.dataset.type;
+                        const detectedType = detectFileTypeFromName(file.name);
+                        
+                        // Check if dropped file matches the button type or is compatible
+                        if (detectedType === fileType || detectedType === 'unknown') {
+                            handleFileSelection(file.name, fileType, file.path || file.name);
+                            // Set this button as active
+                            fileTypeButtons.forEach(btn => btn.classList.remove('active'));
+                            button.classList.add('active');
+                        } else {
+                            alert(`Please drop a ${fileType} file here. Detected file type: ${detectedType}`);
+                        }
+                    }
+                });
+            });
+        }
+
+        function selectFileType(type) {
+            // Update active button
+            document.querySelectorAll('.file-type-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`select${type.charAt(0).toUpperCase() + type.slice(1)}Btn`).classList.add('active');
+            
+            // Trigger file input
+            elements[`${type}Input`].click();
+        }
+
+        function handleFileInput(event, type) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFileSelection(file.name, type, file.path || file.name);
+            }
+        }
+
+        function handleFileSelection(fileName, fileType, filePath) {
+            AppState.selectedFile = filePath;
+            AppState.selectedFileType = fileType;
+            
+            // Update active button to match file type
+            document.querySelectorAll('.file-type-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`select${fileType.charAt(0).toUpperCase() + fileType.slice(1)}Btn`).classList.add('active');
+            
+            // Update UI
+            elements.selectedFileName.textContent = fileName;
+            elements.selectedFileType.textContent = `${fileType.toUpperCase()} file`;
+            
+            // Set appropriate icon
+            const icons = { video: '🎥', audio: '🎵', transcript: '📄' };
+            elements.selectedFileIcon.textContent = icons[fileType] || '📁';
+            
+            // Show selected file display
+            elements.selectedFileDisplay.classList.remove('hidden');
+            
+            // Update workflow steps based on file type
+            updateWorkflowForFileType(fileType);
+            
+            // Update processing button
+            updateProcessingButton();
+        }
+
+        function clearSelectedFile() {
+            elements.selectedFileDisplay.classList.add('hidden');
+            AppState.selectedFile = null;
+            AppState.selectedFileType = null;
+            updateProcessingButton();
+        }
+
+        function detectFileTypeFromName(fileName) {
+            const ext = fileName.toLowerCase().split('.').pop();
+            const videoExts = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v'];
+            const audioExts = ['m4a', 'flac', 'wav', 'mka', 'ogg', 'mp3', 'webm'];
+            const transcriptExts = ['json', 'txt'];
+            
+            if (videoExts.includes(ext)) return 'video';
+            if (audioExts.includes(ext)) return 'audio';
+            if (transcriptExts.includes(ext)) return 'transcript';
+            return 'unknown';
+        }
+
+        function updateWorkflowForFileType(fileType) {
+            const steps = {
+                extractAudio: document.getElementById('extractAudioStep'),
+                processAudio: document.getElementById('processAudioStep'),
+                transcribe: document.getElementById('transcribeStep'),
+                summarize: document.getElementById('summarizeStep')
+            };
+
+            // Reset all steps
+            Object.values(steps).forEach(step => step.classList.remove('disabled'));
+            
+            // Configure based on file type
+            if (fileType === 'audio') {
+                elements.enableExtractAudio.checked = false;
+                elements.enableExtractAudio.disabled = true;
+                steps.extractAudio.classList.add('disabled');
+                AppState.workflowConfig.extractAudio = false;
+            } else if (fileType === 'transcript') {
+                ['extractAudio', 'processAudio', 'transcribe'].forEach(step => {
+                    elements[`enable${step.charAt(0).toUpperCase() + step.slice(1)}`].checked = false;
+                    elements[`enable${step.charAt(0).toUpperCase() + step.slice(1)}`].disabled = true;
+                    steps[step].classList.add('disabled');
+                    AppState.workflowConfig[step] = false;
+                });
+            } else {
+                // Video files - enable all steps
+                Object.keys(AppState.workflowConfig).forEach(key => {
+                    if (typeof AppState.workflowConfig[key] === 'boolean') {
+                        AppState.workflowConfig[key] = true;
+                        const element = elements[`enable${key.charAt(0).toUpperCase() + key.slice(1)}`];
+                        if (element) {
+                            element.checked = true;
+                            element.disabled = false;
+                        }
+                    }
+                });
+            }
+        }
+
+        function updateWorkflowSteps() {
+            AppState.workflowConfig.extractAudio = elements.enableExtractAudio.checked;
+            AppState.workflowConfig.processAudio = elements.enableProcessAudio.checked;
+            AppState.workflowConfig.transcribe = elements.enableTranscribe.checked;
+            AppState.workflowConfig.summarize = elements.enableSummarize.checked;
+            updateProcessingButton();
+        }
+
+        function updateWorkflowConfig() {
+            AppState.workflowConfig.audioFormat = elements.audioFormat.value;
+            AppState.workflowConfig.audioQuality = elements.audioQuality.value;
+            AppState.workflowConfig.increaseVolume = elements.increaseVolume.checked;
+            AppState.workflowConfig.normalizeAudio = elements.normalizeAudio.checked;
+            AppState.workflowConfig.transcribeLanguage = elements.transcribeLanguage.value;
+            AppState.workflowConfig.summaryTemplate = elements.summaryTemplate.value;
+        }
+
+        function updateProcessingButton() {
+            const hasFile = AppState.selectedFile !== null;
+            const hasEnabledSteps = Object.values(AppState.workflowConfig).some(v => v === true);
+            elements.startProcessingBtn.disabled = !hasFile || !hasEnabledSteps;
+        }
+
+        function startProcessing() {
+            if (!AppState.selectedFile) {
+                alert('Please select a file first');
+                return;
+            }
+            
+            // Demo mode - simulate processing
+            const jobId = Date.now().toString();
+            const job = {
+                id: jobId,
+                filename: AppState.selectedFile.split(/[/\\]/).pop(),
+                type: 'workflow',
+                status: 'processing',
+                progress: 0,
+                startTime: new Date()
+            };
+
+            AppState.currentJob = job;
+            switchTab('processing');
+            simulateProcessing(job);
+        }
+
+        function simulateProcessing(job) {
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 15;
+                if (progress >= 100) {
+                    progress = 100;
+                    job.status = 'completed';
+                    job.endTime = new Date();
+                    clearInterval(interval);
+                }
+                job.progress = Math.floor(progress);
+                updateUI();
+            }, 1000);
+        }
+
+        function cancelCurrentJob() {
+            if (AppState.currentJob) {
+                AppState.currentJob.status = 'cancelled';
+                AppState.currentJob = null;
+                updateUI();
+            }
+        }
+
+        function switchTab(tabName) {
+            // Update navigation
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.tab === tabName);
+            });
+
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+
+            const targetTab = document.getElementById(`${tabName}-tab`);
+            if (targetTab) {
+                targetTab.classList.remove('hidden');
+            }
+
+            AppState.activeTab = tabName;
+        }
+
+        function toggleTheme() {
+            AppState.isDarkMode = !AppState.isDarkMode;
+            updateTheme();
+        }
+
+        function updateTheme() {
+            document.body.setAttribute('data-theme', AppState.isDarkMode ? 'dark' : 'light');
+            elements.themeToggle.classList.toggle('active', AppState.isDarkMode);
+            elements.settingsThemeToggle.classList.toggle('active', AppState.isDarkMode);
+        }
+
+        function updateModelOptions() {
+            const provider = elements.llmProvider.value;
+            elements.llmModel.innerHTML = '';
+
+            if (provider === 'openai') {
+                elements.llmModel.innerHTML = `
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                `;
+                elements.apiKeyLabel.textContent = 'OpenAI API Key';
+            } else {
+                elements.llmModel.innerHTML = `
+                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                    <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                `;
+                elements.apiKeyLabel.textContent = 'Anthropic API Key';
+            }
+        }
+
+        function saveConfiguration() {
+            AppState.config = {
+                llmProvider: elements.llmProvider.value,
+                llmModel: elements.llmModel.value,
+                openaiApiKey: elements.llmProvider.value === 'openai' ? elements.apiKey.value : AppState.config.openaiApiKey,
+                anthropicApiKey: elements.llmProvider.value === 'anthropic' ? elements.apiKey.value : AppState.config.anthropicApiKey,
+                replicateApiToken: elements.replicateToken.value,
+                maxTokens: parseInt(elements.maxTokens.value),
+                chunkSeconds: parseInt(elements.chunkSeconds.value)
+            };
+            alert('Configuration saved successfully!');
+        }
+
+        function updateUI() {
+            // Update processing tab
+            if (AppState.currentJob && AppState.currentJob.status === 'processing') {
+                elements.currentJobCard.classList.remove('hidden');
+                elements.noActiveJob.classList.add('hidden');
+                
+                elements.currentJobTitle.textContent = AppState.currentJob.filename;
+                elements.currentJobStartTime.textContent = AppState.currentJob.startTime.toLocaleString();
+                elements.currentJobType.textContent = AppState.currentJob.type;
+                
+                elements.currentJobProgress.innerHTML = `
+                    <div class="progress-container">
+                        <div class="progress-info">
+                            <span>Processing...</span>
+                            <span>${AppState.currentJob.progress}%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${AppState.currentJob.progress}%"></div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                elements.currentJobCard.classList.add('hidden');
+                elements.noActiveJob.classList.remove('hidden');
+            }
+
+            // Update configuration form
+            elements.llmProvider.value = AppState.config.llmProvider;
+            updateModelOptions();
+            elements.llmModel.value = AppState.config.llmModel;
+            elements.apiKey.value = AppState.config.llmProvider === 'openai' ? 
+                AppState.config.openaiApiKey : AppState.config.anthropicApiKey;
+            elements.replicateToken.value = AppState.config.replicateApiToken;
+            elements.maxTokens.value = AppState.config.maxTokens;
+            elements.chunkSeconds.value = AppState.config.chunkSeconds;
+
+            // Update theme
+            updateTheme();
+        }
+
+        // Global function for inline event handlers
+        window.switchTab = switchTab;
+
+        // Initialize
+        updateUI();
+    </script>
+</body>
+</html>

@@ -2,11 +2,11 @@
 import pytest
 from pathlib import Path
 
-from core.config import SETTINGS
+from core.utils.config import SETTINGS
 from core.audio.ffmpeg_ops import probe
 from core.providers.openai_client import client as openai_client
 from core.providers.anthropic_client import client as anthropic_client
-from core.fsio import get_data_manager
+from core.utils.fsio import get_data_manager
 from core.models import TranscriptionJob, SummarizationJob, ProcessingStatus
 
 

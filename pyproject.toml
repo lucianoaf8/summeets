@@ -26,7 +26,7 @@ summeets = "main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "cli*", "gui*", "main*"]
+include = ["core*", "cli*", "main*"]
 
 [tool.setuptools]
 py-modules = ["main"]

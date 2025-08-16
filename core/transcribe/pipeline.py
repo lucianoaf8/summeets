@@ -6,10 +6,10 @@ import logging
 from pathlib import Path
 from typing import Optional, Tuple, List
 
-from ..config import SETTINGS
+from ..utils.config import SETTINGS
 from ..audio import pick_best_audio, ensure_wav16k_mono, compress_audio_for_upload, cleanup_temp_file
-from ..transcription import ReplicateTranscriber, format_transcript_output, parse_replicate_output
-from ..transcription.formatting import Segment
+from .replicate_api import ReplicateTranscriber
+from .formatting import format_transcript_output, parse_replicate_output, Segment
 
 log = logging.getLogger(__name__)
 

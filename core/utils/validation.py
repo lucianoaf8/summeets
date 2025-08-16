@@ -11,22 +11,79 @@ from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
 
-# Security patterns
+# Enhanced security patterns for path traversal prevention
 SUSPICIOUS_PATTERNS = [
-    r'\.\./',  # Directory traversal
+    r'\.\.[\\/]',  # Directory traversal (../ and ..\)
+    r'[\\/]\.\.[\\/]',  # Directory traversal in middle of path
+    r'[\\/]\.\.$',  # Directory traversal at end
+    r'\.\.%2f',  # URL encoded traversal
+    r'\.\.%5c',  # URL encoded traversal (backslash)
+    r'%2e%2e%2f',  # Double URL encoded traversal
+    r'%252e%252e%252f',  # Triple URL encoded traversal
     r'[<>"|*?]',  # Invalid filename chars
     r'^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)',  # Windows reserved names
     r'^\s*$',  # Empty or whitespace only
+    r'[\x00-\x1f]',  # Control characters
+    r'[\x7f-\x9f]',  # Extended control characters
 ]
 
 MAX_PATH_LENGTH = 260  # Windows MAX_PATH limit
 MAX_FILENAME_LENGTH = 255
 SUPPORTED_AUDIO_EXTENSIONS = {'.m4a', '.mka', '.ogg', '.mp3', '.wav', '.webm', '.flac'}
+SUPPORTED_VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v'}
+SUPPORTED_TRANSCRIPT_EXTENSIONS = {'.json', '.txt'}
 
 
 class ValidationError(ValueError):
     """Raised when input validation fails."""
     pass
+
+
+def validate_safe_path(path: Union[str, Path], allowed_directories: Optional[List[Path]] = None) -> Path:
+    """
+    Validate path is safe and within allowed directories.
+    
+    Args:
+        path: Path to validate
+        allowed_directories: List of allowed parent directories (None = allow all)
+        
+    Returns:
+        Resolved and validated Path object
+        
+    Raises:
+        ValidationError: If path is unsafe or outside allowed directories
+    """
+    if isinstance(path, str):
+        path_str = sanitize_path_input(path)
+        path = Path(path_str)
+    
+    # Resolve to absolute path to handle symlinks and relative paths
+    try:
+        resolved_path = path.resolve()
+    except (OSError, RuntimeError) as e:
+        raise ValidationError(f"Failed to resolve path: {e}")
+    
+    # Additional security check: ensure resolved path doesn't contain traversal
+    path_str = str(resolved_path)
+    for pattern in SUSPICIOUS_PATTERNS[:7]:  # Only check traversal patterns
+        if re.search(pattern, path_str, re.IGNORECASE):
+            raise ValidationError("Path contains directory traversal patterns")
+    
+    # Check against allowed directories if specified
+    if allowed_directories:
+        is_allowed = False
+        for allowed_dir in allowed_directories:
+            try:
+                resolved_path.relative_to(allowed_dir.resolve())
+                is_allowed = True
+                break
+            except ValueError:
+                continue
+        
+        if not is_allowed:
+            raise ValidationError(f"Path is outside allowed directories: {resolved_path}")
+    
+    return resolved_path
 
 
 def sanitize_path_input(path_input: str) -> str:
@@ -77,9 +134,7 @@ def validate_audio_path(path: Union[str, Path]) -> Path:
         ValidationError: If path is invalid
         FileNotFoundError: If path doesn't exist
     """
-    if isinstance(path, str):
-        path_str = sanitize_path_input(path)
-        path = Path(path_str).resolve()
+    path = validate_safe_path(path)
     
     if not path.exists():
         raise FileNotFoundError(f"Path does not exist: {path}")
@@ -123,9 +178,7 @@ def validate_output_directory(path: Union[str, Path]) -> Path:
     Raises:
         ValidationError: If path is invalid
     """
-    if isinstance(path, str):
-        path_str = sanitize_path_input(path)
-        path = Path(path_str).resolve()
+    path = validate_safe_path(path)
     
     # Check parent directory exists and is writable
     parent = path.parent
@@ -306,9 +359,7 @@ def validate_transcript_file(path: Union[str, Path]) -> Path:
         ValidationError: If path is invalid
         FileNotFoundError: If file doesn't exist
     """
-    if isinstance(path, str):
-        path_str = sanitize_path_input(path)
-        path = Path(path_str).resolve()
+    path = validate_safe_path(path)
     
     if not path.exists():
         raise FileNotFoundError(f"Transcript file does not exist: {path}")
@@ -359,3 +410,156 @@ def validate_model_name(model: str) -> str:
         raise ValidationError("Model name too long (max 100 characters)")
     
     return model
+
+
+def validate_video_path(path: Union[str, Path]) -> Path:
+    """
+    Validate video file path.
+    
+    Args:
+        path: Path to validate
+        
+    Returns:
+        Validated Path object
+        
+    Raises:
+        ValidationError: If path is invalid
+        FileNotFoundError: If path doesn't exist
+    """
+    path = validate_safe_path(path)
+    
+    if not path.exists():
+        raise FileNotFoundError(f"Video file does not exist: {path}")
+    
+    if not path.is_file():
+        raise ValidationError(f"Path is not a file: {path}")
+    
+    # Validate as video file
+    if path.suffix.lower() not in SUPPORTED_VIDEO_EXTENSIONS:
+        raise ValidationError(f"Unsupported video format: {path.suffix}")
+    
+    # Check file is readable
+    if not os.access(path, os.R_OK):
+        raise ValidationError(f"Video file is not readable: {path}")
+    
+    return path
+
+
+def validate_transcript_path(path: Union[str, Path]) -> Path:
+    """
+    Validate transcript file path.
+    
+    Args:
+        path: Path to validate
+        
+    Returns:
+        Validated Path object
+        
+    Raises:
+        ValidationError: If path is invalid
+        FileNotFoundError: If path doesn't exist
+    """
+    path = validate_safe_path(path)
+    
+    if not path.exists():
+        raise FileNotFoundError(f"Transcript file does not exist: {path}")
+    
+    if not path.is_file():
+        raise ValidationError(f"Path is not a file: {path}")
+    
+    # Check file extension
+    if path.suffix.lower() not in SUPPORTED_TRANSCRIPT_EXTENSIONS:
+        raise ValidationError(f"Unsupported transcript format: {path.suffix}")
+    
+    # Check file is readable
+    if not os.access(path, os.R_OK):
+        raise ValidationError(f"Transcript file is not readable: {path}")
+    
+    # Additional validation for JSON transcript files
+    if path.suffix.lower() == '.json':
+        try:
+            import json
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Basic structure validation
+            if isinstance(data, list):
+                # Expect list of transcript segments
+                if data and not isinstance(data[0], dict):
+                    raise ValidationError("JSON transcript must be a list of objects")
+            elif isinstance(data, dict):
+                # Could be a wrapped transcript format
+                if 'segments' not in data and 'transcript' not in data:
+                    log.warning(f"JSON transcript format may be non-standard: {path}")
+            else:
+                raise ValidationError("JSON transcript must be a list or object")
+                
+        except json.JSONDecodeError as e:
+            raise ValidationError(f"Invalid JSON format in transcript file: {e}")
+    
+    return path
+
+
+def detect_file_type(path: Union[str, Path]) -> str:
+    """
+    Detect the type of file based on its extension.
+    
+    Args:
+        path: Path to analyze
+        
+    Returns:
+        File type: 'video', 'audio', 'transcript', or 'unknown'
+    """
+    if isinstance(path, str):
+        path = Path(path)
+    
+    extension = path.suffix.lower()
+    
+    if extension in SUPPORTED_VIDEO_EXTENSIONS:
+        return 'video'
+    elif extension in SUPPORTED_AUDIO_EXTENSIONS:
+        return 'audio'
+    elif extension in SUPPORTED_TRANSCRIPT_EXTENSIONS:
+        return 'transcript'
+    else:
+        return 'unknown'
+
+
+def validate_workflow_input(path: Union[str, Path]) -> tuple[Path, str]:
+    """
+    Validate input file and determine its type for workflow processing.
+    
+    Args:
+        path: Path to input file
+        
+    Returns:
+        Tuple of (validated_path, file_type)
+        
+    Raises:
+        ValidationError: If file is invalid or unsupported
+    """
+    path = validate_safe_path(path)
+    
+    if not path.exists():
+        raise FileNotFoundError(f"Input file does not exist: {path}")
+    
+    if not path.is_file():
+        raise ValidationError(f"Input path is not a file: {path}")
+    
+    file_type = detect_file_type(path)
+    
+    if file_type == 'unknown':
+        raise ValidationError(
+            f"Unsupported file format: {path.suffix}. "
+            f"Supported formats: {', '.join(SUPPORTED_VIDEO_EXTENSIONS | SUPPORTED_AUDIO_EXTENSIONS | SUPPORTED_TRANSCRIPT_EXTENSIONS)}"
+        )
+    
+    # Validate according to specific type
+    if file_type == 'video':
+        validate_video_path(path)
+    elif file_type == 'audio':
+        validate_audio_path(path)
+    elif file_type == 'transcript':
+        validate_transcript_path(path)
+    
+    return path, file_type

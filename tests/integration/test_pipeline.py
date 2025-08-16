@@ -8,9 +8,9 @@ from unittest.mock import Mock, patch, MagicMock
 import tempfile
 import json
 
-from core.transcribe.new_pipeline import TranscriptionPipeline
-from core.transcription.formatting import Segment, Word
-from core.exceptions import TranscriptionError, FileOperationError
+from core.transcribe.pipeline import TranscriptionPipeline
+from core.models import Segment, Word
+from core.utils.exceptions import TranscriptionError, FileOperationError
 
 
 @pytest.fixture

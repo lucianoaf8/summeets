@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     summary_max_tokens: int = Field(3000, alias="SUMMARY_MAX_OUTPUT_TOKENS")
     summary_chunk_seconds: int = Field(1800, alias="SUMMARY_CHUNK_SECONDS")
     summary_cod_passes: int = Field(2, alias="SUMMARY_COD_PASSES")
+    summary_template: str = Field("default", alias="SUMMARY_TEMPLATE")
+    summary_auto_detect: bool = Field(True, alias="SUMMARY_AUTO_DETECT_TEMPLATE")
     
     # Audio Processing
     ffmpeg_bin: str = "ffmpeg"

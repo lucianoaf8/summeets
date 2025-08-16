@@ -44,6 +44,14 @@ class FileType(str, Enum):
     CSV = "csv"
 
 
+class SummaryTemplate(str, Enum):
+    """Summary template types."""
+    DEFAULT = "default"
+    SOP = "sop"
+    DECISION = "decision"
+    BRAINSTORM = "brainstorm"
+
+
 @dataclass
 class Word:
     """Individual word with timing information."""
@@ -51,6 +59,17 @@ class Word:
     end: float
     text: str
     confidence: Optional[float] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        result = {
+            "start": self.start,
+            "end": self.end,
+            "text": self.text
+        }
+        if self.confidence is not None:
+            result["confidence"] = self.confidence
+        return result
 
 
 @dataclass
@@ -62,6 +81,19 @@ class Segment:
     speaker: Optional[str] = None
     words: Optional[List[Word]] = None
     confidence: Optional[float] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        result = {
+            "start": self.start,
+            "end": self.end,
+            "text": self.text,
+            "speaker": self.speaker,
+            "words": [w.to_dict() for w in (self.words or [])]
+        }
+        if self.confidence is not None:
+            result["confidence"] = self.confidence
+        return result
 
 
 class AudioMetadata(BaseModel):
@@ -121,10 +153,13 @@ class SummarizationJob(BaseModel):
     chunk_seconds: int = 1800
     cod_passes: int = 2
     max_tokens: int = 3000
+    template: SummaryTemplate = SummaryTemplate.DEFAULT
+    auto_detect_template: bool = True
     
     # Results
     summary: Optional[str] = None
     chunk_summaries: Optional[List[str]] = None
+    detected_template: Optional[SummaryTemplate] = None
     output_files: Dict[FileType, Path] = Field(default_factory=dict)
 
 
@@ -222,6 +257,24 @@ class JobManager(BaseModel):
                 self.completed_jobs.remove(job_id)
             if job_id in self.failed_jobs:
                 self.failed_jobs.remove(job_id)
+
+
+@dataclass
+class TranscriptData:
+    """Complete transcript data with segments and metadata."""
+    segments: List[Segment]
+    duration: float
+    output_file: Optional[Path] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+@dataclass 
+class SummaryData:
+    """Summary data with content and metadata."""
+    content: str
+    output_file: Optional[Path] = None
+    metadata: Optional[Dict[str, Any]] = None
+    chunk_summaries: Optional[List[str]] = None
 
 
 # Legacy compatibility

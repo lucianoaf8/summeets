@@ -6,8 +6,8 @@ Production-grade monorepo for transcribing and summarizing meetings with speaker
 
 * **Audio Processing**: FFmpeg-based normalization, extraction, and format conversion
 * **Transcription**: Replicate's `thomasmol/whisper-diarization` (Whisper v3 + Pyannote) for speaker-aware transcription
-* **Summarization**: Map-reduce + Chain-of-Density summarization with OpenAI GPT-4o or Anthropic Claude
-* **Dual Interface**: Full-featured CLI (`summeets`) and GUI (`summeets gui`) sharing the same core
+* **Summarization**: Map-reduce + Chain-of-Density summarization with OpenAI GPT-4o or Anthropic Claude, multiple templates for different meeting types
+* **Dual Interface**: Full-featured CLI (`summeets`) and Electron GUI (`python main.py gui`) sharing the same core
 * **Production Ready**: Structured logging, configuration management, error handling
 
 ### Model Support
@@ -30,6 +30,7 @@ Audio processing using FFmpeg's documented features:
 ### 1) Requirements
 
 * **Python 3.11+**
+* **Node.js and npm** (required for GUI)
 * **FFmpeg** (optional but recommended) with `ffmpeg` and `ffprobe` binaries
 * **API Keys**: At least one of:
   * OpenAI API key for GPT-4o summarization
@@ -47,6 +48,9 @@ Audio processing using FFmpeg's documented features:
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e .
+
+# For GUI support
+npm install
 ```
 
 #### Linux/Mac
@@ -54,6 +58,9 @@ pip install -e .
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
+
+# For GUI support
+npm install
 ```
 
 ### 3) Configuration
@@ -71,6 +78,8 @@ REPLICATE_API_TOKEN=r8_...
 
 # Optional settings
 SUMMARY_MAX_OUTPUT_TOKENS=3000
+SUMMARY_TEMPLATE=default            # default|sop|decision|brainstorm
+SUMMARY_AUTO_DETECT_TEMPLATE=true   # Auto-detect template from content
 SUMMARY_CHUNK_SECONDS=1800
 SUMMARY_COD_PASSES=2
 ```
@@ -88,6 +97,9 @@ summeets process /path/to/meeting.m4a
 
 # With specific provider/model
 summeets process /path/to/meeting.m4a --provider anthropic --model claude-3-5-sonnet-20241022
+
+# With specific template (auto-detection also works)
+summeets process /path/to/training.m4a --template sop
 ```
 
 #### Individual Steps
@@ -99,27 +111,66 @@ summeets transcribe /path/to/audio.m4a
 # 2. Summarize transcript
 summeets summarize out/audio.json --provider openai --model gpt-4o
 
+# 2a. With specific template
+summeets summarize out/audio.json --template sop
+summeets summarize out/audio.json --template decision --no-auto-detect
+
+# 2b. List available templates
+summeets templates
+
 # 3. View configuration
 summeets config
 ```
 
+### Summary Templates
+
+Summeets supports multiple summary templates optimized for different meeting types:
+
+| Template | Description | Best For |
+|----------|-------------|----------|
+| **default** | Comprehensive summary for general meetings | Status updates, discussions, regular meetings |
+| **sop** | Standard Operating Procedure documentation | Training sessions, process walkthroughs, tutorials |
+| **decision** | Focus on decisions and their rationale | Strategy meetings, decision-making sessions |
+| **brainstorm** | Capture and organize creative ideas | Brainstorming sessions, idea generation |
+
+#### SOP Template Features
+The SOP template is specifically designed for process documentation and includes:
+- **Step-by-step instructions** extracted from the meeting
+- **File references** with locations and purposes  
+- **System requirements** and prerequisites
+- **Troubleshooting** common issues mentioned
+- **Additional resources** and reference materials
+
+Perfect for creating comprehensive guides from training recordings.
+
+#### Auto-Detection
+Summeets can automatically detect the meeting type based on content keywords:
+- Process indicators: "step by step", "how to", "configure", "setup"
+- Decision indicators: "decide", "choose", "vote", "recommendation"  
+- Brainstorm indicators: "idea", "creative", "what if", "possibility"
+
+Use `--auto-detect` (default) to enable or `--no-auto-detect` to force a specific template.
 
 ### GUI Interface
 
-Launch the GUI with:
+Launch the Electron GUI with:
 ```bash
-summeets gui
-# or
 python main.py gui
 # or (default behavior)
 python main.py
 ```
 
-The GUI provides an intuitive interface for:
-- Audio normalization and extraction
-- Interactive transcription with progress tracking
-- Summarization with provider selection
-- Real-time status updates
+**Requirements:**
+- Node.js and npm must be installed ([Download Node.js](https://nodejs.org/))
+- Run `npm install` in project root if node_modules/ doesn't exist
+- On Windows, make sure to restart your terminal after Node.js installation
+
+The Electron GUI provides:
+- **Cross-platform desktop application** with native OS integration
+- **Workflow automation** for video/audio/transcript processing
+- **Real-time progress tracking** with Python backend integration
+- **Interactive file selection** with drag-and-drop support
+- **Configuration management** with persistent settings
 
 ### Configuration
 
@@ -141,12 +192,24 @@ summeets/
 │  ├─ logging.py            # Structured logging
 │  ├─ fsio.py               # File system operations
 │  ├─ jobs.py               # Job management
-│  ├─ audio/ffmpeg_ops.py   # Audio processing
+│  ├─ workflow.py           # Workflow engine for multi-step processing
+│  ├─ audio/                # Audio processing
+│  │  ├─ ffmpeg_ops.py      # FFmpeg operations
+│  │  ├─ selection.py       # Audio file selection logic
+│  │  └─ compression.py     # Audio compression utilities
 │  ├─ providers/            # LLM clients (OpenAI, Anthropic)
 │  ├─ transcribe/pipeline.py # Transcription logic
-│  └─ summarize/pipeline.py  # Summarization logic
+│  ├─ summarize/pipeline.py  # Summarization logic
+│  └─ utils/                # Reorganized utilities
+│     ├─ file_utils.py      # File operations
+│     ├─ text_utils.py      # Text processing
+│     └─ validation.py      # Input validation
 ├─ cli/app.py               # Typer CLI interface
-├─ gui/app.py               # tkinter GUI interface
+├─ electron/                # Electron GUI application
+│  ├─ main.js               # Electron main process with Python integration
+│  ├─ index.html            # React-based GUI interface
+│  ├─ preload.js            # Security context bridge
+│  └─ src/                  # React components
 ├─ data/                    # Organized data storage
 │  ├─ input/                # Input files (by date)
 │  ├─ output/               # Processing results (by date/type)
@@ -154,17 +217,21 @@ summeets/
 │  └─ jobs/                 # Job state persistence
 ├─ tests/                   # Comprehensive test suite
 ├─ scripts/win_dev.ps1      # Development setup
-└─ pyproject.toml           # Package definition
+├─ package.json             # Node.js dependencies
+├─ webpack.config.js        # Webpack bundler configuration
+└─ pyproject.toml           # Python package definition
 ```
 
 ### Processing Pipeline
 
-1. **Audio Selection**: Intelligently picks best quality audio from directories
-2. **Format Optimization**: Converts to optimal format (16kHz mono) using FFmpeg
-3. **Transcription**: Replicate's Whisper + Pyannote for speaker-aware transcription
-4. **Chunking**: Time-based segmentation for large transcripts
-5. **Map-Reduce**: Parallel summarization across chunks
-6. **Chain-of-Density**: Iterative refinement for concise summaries
+1. **Input Detection**: Automatically identifies file type (video/audio/transcript)
+2. **Workflow Engine**: Conditionally executes appropriate processing steps
+3. **Audio Extraction**: FFmpeg extracts audio from video if needed
+4. **Format Optimization**: Converts to optimal format (16kHz mono) using FFmpeg
+5. **Transcription**: Replicate's Whisper + Pyannote for speaker-aware transcription
+6. **Chunking**: Time-based segmentation for large transcripts
+7. **Map-Reduce**: Parallel summarization across chunks
+8. **Chain-of-Density**: Iterative refinement for concise summaries
 
 ### Output Files
 
@@ -191,6 +258,13 @@ This project evolved from a simple transcription script into a production-grade 
 * **FFmpeg Not Found**: Install FFmpeg or set `ffmpeg_bin`/`ffprobe_bin` paths in config
 * **Replicate Upload Errors**: Audio compression happens automatically to fit upload limits
 * **Model Errors**: Use exact model names (e.g., `claude-3-5-sonnet-20241022` not `claude-sonnet`)
+* **GUI Won't Start (Windows)**: 
+  - Make sure Node.js is installed and terminal was restarted after installation
+  - Try running `npm.cmd install` manually in the project root
+  - Check that `npm.cmd` is in your PATH
+* **GUI Won't Start (Linux/Mac)**: 
+  - Ensure Node.js and npm are installed: `node --version` and `npm --version`
+  - Run `npm install` in the project root if node_modules/ is missing
 
 ### Advanced Configuration
 
@@ -224,13 +298,17 @@ pip install -e .[dev]
 
 ```bash
 # Type checking
-mypy core/ cli/ gui/
+mypy core/ cli/
 
 # Linting
 ruff check .
 
 # Testing
 python -m pytest tests/
+
+# GUI Development
+npm run dev  # Run Electron in development mode with hot reload
+npm run build  # Build Electron app for distribution
 ```
 
 ### Contributing

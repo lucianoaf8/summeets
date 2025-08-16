@@ -1,6 +1,8 @@
 """Transcription pipeline for summeets."""
 
 from .pipeline import run as _run_pipeline, TranscriptionPipeline
+from .replicate_api import ReplicateTranscriber
+from .formatting import format_transcript_output, parse_replicate_output
 from pathlib import Path
 from typing import Tuple
 
@@ -121,4 +123,11 @@ def _format_srt_time(seconds: float) -> str:
 # Also export the original function
 run = _run_pipeline
 
-__all__ = ["transcribe_audio", "run", "TranscriptionPipeline"]
+__all__ = [
+    "transcribe_audio", 
+    "run", 
+    "TranscriptionPipeline",
+    "ReplicateTranscriber",
+    "format_transcript_output", 
+    "parse_replicate_output"
+]

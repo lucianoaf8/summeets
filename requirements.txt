@@ -13,6 +13,7 @@ anthropic>=0.34.1,<1.0
 
 # UI frameworks
 rich>=13.7,<14.0
+ttkbootstrap>=1.10.1
 
 # Audio transcription
 replicate>=0.25.0,<1.0

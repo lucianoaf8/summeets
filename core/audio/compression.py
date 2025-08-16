@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from ..config import SETTINGS
+from ..utils.config import SETTINGS
 from .ffmpeg_ops import run_cmd
 
 log = logging.getLogger(__name__)

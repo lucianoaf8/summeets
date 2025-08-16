@@ -1,6 +1,8 @@
 """Summarization pipeline for summeets."""
 
 from .pipeline import run as _run_pipeline
+from .templates import SummaryTemplates, detect_meeting_type
+from ..models import SummaryTemplate
 from pathlib import Path
 from typing import Tuple, Optional
 
@@ -12,6 +14,8 @@ def summarize_transcript(
     cod_passes: int = None,
     output_dir: Path = None,
     max_output_tokens: int = None,
+    template: SummaryTemplate = None,
+    auto_detect_template: bool = None,
     **kwargs  # Accept additional parameters for forward compatibility
 ) -> Tuple[Path, Path]:
     """
@@ -26,12 +30,14 @@ def summarize_transcript(
         cod_passes: Chain-of-Density passes
         output_dir: Output directory
         max_output_tokens: Maximum output tokens (applied via settings)
+        template: Summary template to use
+        auto_detect_template: Whether to auto-detect template type
         **kwargs: Additional parameters for forward compatibility
     """
     # Handle max_output_tokens by temporarily updating settings
     original_max_tokens = None
     if max_output_tokens is not None:
-        from ..config import SETTINGS
+        from ..utils.config import SETTINGS
         original_max_tokens = SETTINGS.summary_max_tokens
         SETTINGS.summary_max_tokens = max_output_tokens
     
@@ -42,12 +48,14 @@ def summarize_transcript(
             model=model,
             chunk_seconds=chunk_seconds,
             cod_passes=cod_passes,
-            output_dir=output_dir
+            output_dir=output_dir,
+            template=template,
+            auto_detect_template=auto_detect_template
         )
     finally:
         # Restore original setting
         if original_max_tokens is not None:
-            from ..config import SETTINGS
+            from ..utils.config import SETTINGS
             SETTINGS.summary_max_tokens = original_max_tokens
     # The pipeline saves both MD and JSON, construct MD path
     md_path = json_path.with_suffix('.md') if json_path else None
@@ -61,4 +69,4 @@ def summarize_transcript(
 # Also export the original function
 run = _run_pipeline
 
-__all__ = ["summarize_transcript", "run"]
+__all__ = ["summarize_transcript", "run", "SummaryTemplates", "SummaryTemplate", "detect_meeting_type"]

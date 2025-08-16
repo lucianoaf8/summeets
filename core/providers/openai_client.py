@@ -1,17 +1,51 @@
 from openai import OpenAI
 import json
 import logging
-from ..config import SETTINGS
+from typing import Optional
+from ..utils.config import SETTINGS
+from ..utils.exceptions import SummeetsError
 
 log = logging.getLogger(__name__)
 
-_client = None
+_client: Optional[OpenAI] = None
+_last_api_key: Optional[str] = None
+
+def _validate_api_key(api_key: str) -> bool:
+    """Validate OpenAI API key format."""
+    if not api_key:
+        return False
+    if not api_key.startswith('sk-'):
+        return False
+    if len(api_key) < 20:  # Minimum reasonable length
+        return False
+    return True
 
 def client() -> OpenAI:
-    global _client
-    if _client is None:
-        _client = OpenAI(api_key=SETTINGS.openai_api_key)
+    """Get OpenAI client with proper lifecycle management and validation."""
+    global _client, _last_api_key
+    
+    current_api_key = SETTINGS.openai_api_key
+    
+    # Validate API key
+    if not _validate_api_key(current_api_key):
+        raise SummeetsError("Invalid or missing OpenAI API key")
+    
+    # Create new client if needed (first time or key changed)
+    if _client is None or _last_api_key != current_api_key:
+        try:
+            _client = OpenAI(api_key=current_api_key)
+            _last_api_key = current_api_key
+            log.debug("OpenAI client initialized")
+        except Exception as e:
+            raise SummeetsError(f"Failed to initialize OpenAI client: {e}")
+    
     return _client
+
+def reset_client() -> None:
+    """Reset the client cache (useful for testing or key rotation)."""
+    global _client, _last_api_key
+    _client = None
+    _last_api_key = None
 
 def summarize_chunks(chunks: list[str], schema: dict, max_out_tokens: int) -> list[str]:
     """Structured Outputs with json_schema response_format."""

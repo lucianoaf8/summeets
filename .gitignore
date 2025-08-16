@@ -273,6 +273,7 @@ checkpoints/
 htmlcov/
 .pytest_cache/
 test-results/
+tests/reports/
 .tox/
 
 # Trash folder (deprecated files)
@@ -282,3 +283,4 @@ trash/
 data/input/*
 data/output/*
 .claude/
+node_modules

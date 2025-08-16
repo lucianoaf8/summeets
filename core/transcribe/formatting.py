@@ -6,45 +6,10 @@ import json
 import logging
 from pathlib import Path
 from typing import List, Dict, Optional
-from dataclasses import dataclass
+
+from ..models import Word, Segment
 
 log = logging.getLogger(__name__)
-
-
-@dataclass
-class Word:
-    """Individual word with timing information."""
-    start: float
-    end: float
-    text: str
-    
-    def to_dict(self) -> Dict:
-        """Convert to dictionary."""
-        return {
-            "start": self.start,
-            "end": self.end,
-            "text": self.text
-        }
-
-
-@dataclass
-class Segment:
-    """Text segment with speaker attribution and word-level timing."""
-    start: float
-    end: float
-    text: str
-    speaker: Optional[str] = None
-    words: Optional[List[Word]] = None
-    
-    def to_dict(self) -> Dict:
-        """Convert to dictionary."""
-        return {
-            "start": self.start,
-            "end": self.end,
-            "text": self.text,
-            "speaker": self.speaker,
-            "words": [w.to_dict() for w in (self.words or [])]
-        }
 
 
 def parse_replicate_output(output: Dict) -> List[Segment]:
@@ -66,7 +31,8 @@ def parse_replicate_output(output: Dict) -> List[Segment]:
             words.append(Word(
                 start=word_data.get("start", 0.0),
                 end=word_data.get("end", 0.0),
-                text=word_data.get("word", "").strip()
+                text=word_data.get("word", "").strip(),
+                confidence=word_data.get("confidence")
             ))
         
         # Create segment
@@ -75,7 +41,8 @@ def parse_replicate_output(output: Dict) -> List[Segment]:
             end=seg_data.get("end", 0.0),
             text=seg_data.get("text", "").strip(),
             speaker=seg_data.get("speaker"),
-            words=words if words else None
+            words=words if words else None,
+            confidence=seg_data.get("confidence")
         )
         
         segments.append(segment)
