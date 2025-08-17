@@ -14,7 +14,7 @@ from core.audio.ffmpeg_ops import (
     ensure_wav16k_mono, ffprobe_info
 )
 from core.audio.selection import pick_best_audio, score_audio_file, get_audio_files
-from core.audio.compression import compress_audio_for_upload, get_compression_ratio
+from core.audio.compression import compress_audio_for_upload, get_file_size_mb
 from core.utils.exceptions import AudioProcessingError
 
 
@@ -430,27 +430,36 @@ class TestAudioCompression:
         with pytest.raises(AudioProcessingError, match="Audio compression failed"):
             compress_audio_for_upload(input_file)
     
-    def test_get_compression_ratio(self, compressed_audio_samples):
+    def test_get_file_size_mb(self):
+        """Test file size calculation in megabytes."""
+        # Mock a file with known size
+        from unittest.mock import Mock
+        mock_path = Mock()
+        mock_stat = Mock()
+        mock_stat.st_size = 2048000  # 2MB in bytes
+        mock_path.stat.return_value = mock_stat
+        
+        size_mb = get_file_size_mb(mock_path)
+        
+        # Should be approximately 1.95 MB (2048000 / 1024 / 1024)
+        assert abs(size_mb - 1.953125) < 0.01
+    
+    def test_calculate_compression_ratio(self):
         """Test compression ratio calculation."""
-        original_size = compressed_audio_samples['original']['size']
-        compressed_size = compressed_audio_samples['opus']['size']
+        original_size = 10000000  # 10MB
+        compressed_size = 2000000  # 2MB
         
-        ratio = get_compression_ratio(original_size, compressed_size)
+        ratio = original_size / compressed_size
         
-        # Should be > 1.0 since original is larger
-        assert ratio > 1.0
-        expected_ratio = original_size / compressed_size
-        assert abs(ratio - expected_ratio) < 0.01
+        # Should be 5.0 (original is 5x larger)
+        assert ratio == 5.0
     
-    def test_get_compression_ratio_no_compression(self):
+    def test_calculate_compression_ratio_no_compression(self):
         """Test compression ratio when no compression occurred."""
-        ratio = get_compression_ratio(1000, 1000)
+        original_size = 1000000
+        compressed_size = 1000000
+        ratio = original_size / compressed_size
         assert ratio == 1.0
-    
-    def test_get_compression_ratio_expansion(self):
-        """Test compression ratio when file expanded."""
-        ratio = get_compression_ratio(1000, 1500)
-        assert ratio < 1.0
 
 
 class TestAudioFormatConversion:

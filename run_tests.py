@@ -24,7 +24,7 @@ class SummeetsTestRunner:
     
     def run_unit_tests(self, verbose=False, coverage=True):
         """Run unit tests only."""
-        print("🧪 Running unit tests...")
+        print("[UNIT] Running unit tests...")
         
         cmd = ["python", "-m", "pytest", "tests/unit/"]
         
@@ -85,14 +85,14 @@ class SummeetsTestRunner:
                 "--cov=cli", 
                 "--cov-branch",
                 "--cov-report=term-missing",
-                "--cov-report=html:htmlcov"
+                "--cov-report=html:tests/reports/htmlcov"
             ])
         
         return self._execute_command(cmd, test_type="all")
     
     def run_smoke_tests(self, verbose=False):
         """Run smoke test suite (critical path validation)."""
-        print("💨 Running smoke tests...")
+        print("[SMOKE] Running smoke tests...")
         
         # Run a small subset of critical tests for quick validation
         cmd = [
@@ -160,7 +160,7 @@ class SummeetsTestRunner:
     
     def check_test_coverage(self):
         """Generate and display test coverage report."""
-        print("📊 Generating coverage report...")
+        print("[COVERAGE] Generating coverage report...")
         
         # Run tests with coverage
         cmd = [
@@ -168,17 +168,17 @@ class SummeetsTestRunner:
             "--cov=core", "--cov=cli", 
             "--cov-branch",
             "--cov-report=term-missing",
-            "--cov-report=html:htmlcov",
-            "--cov-report=xml:coverage.xml"
+            "--cov-report=html:tests/reports/htmlcov",
+            "--cov-report=xml:tests/reports/coverage.xml"
         ]
         
         result = self._execute_command(cmd, test_type="coverage")
         
         if result == 0:
-            print("\n📈 Coverage report generated:")
+            print("\n[SUCCESS] Coverage report generated:")
             print("   - Terminal: displayed above")
-            print("   - HTML: htmlcov/index.html")
-            print("   - XML: coverage.xml")
+            print("   - HTML: tests\\reports\\htmlcov\\index.html")
+            print("   - XML: tests\\reports\\coverage.xml")
         
         return result
     
@@ -222,24 +222,26 @@ class SummeetsTestRunner:
     
     def clean_test_artifacts(self):
         """Clean up test artifacts and cache files."""
-        print("🧹 Cleaning test artifacts...")
+        print("[CLEAN] Cleaning test artifacts...")
         
         artifacts = [
             ".pytest_cache",
-            "htmlcov",
+            "tests/reports/htmlcov",
+            "tests/reports/coverage.xml",
             ".coverage",
-            "coverage.xml",
             "tests.log",
             "__pycache__",
             "*.pyc"
         ]
         
         for artifact in artifacts:
-            cmd = ["find", ".", "-name", artifact, "-type", "d", "-exec", "rm", "-rf", "{}", "+"]
-            self._execute_command(cmd, capture_output=True)
-            
-            cmd = ["find", ".", "-name", artifact, "-type", "f", "-delete"]
-            self._execute_command(cmd, capture_output=True)
+            # Use PowerShell commands for Windows compatibility
+            if artifact in ["tests/reports/htmlcov", "tests/reports/coverage.xml", ".coverage", "tests.log"]:
+                cmd = ["powershell.exe", "-Command", f"Remove-Item -Path '{artifact}' -Recurse -Force -ErrorAction SilentlyContinue"]
+                self._execute_command(cmd, capture_output=True)
+            else:
+                cmd = ["powershell.exe", "-Command", f"Get-ChildItem -Path . -Name '{artifact}' -Recurse | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"]
+                self._execute_command(cmd, capture_output=True)
         
         print("   Test artifacts cleaned")
         return 0
@@ -286,16 +288,24 @@ class SummeetsTestRunner:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return f"test_report_{test_type}_{timestamp}.md"
     
-    def _format_output_for_markdown(self, text):
+    def _format_output_for_markdown(self, text, max_lines=500):
         """Format terminal output for markdown with syntax highlighting."""
         if not text:
             return ""
         
-        # Escape markdown special characters in the text first
-        # text = text.replace('\\', '\\\\').replace('`', '\\`')
+        lines = text.split('\n')
+        
+        # Truncate very long output for readability
+        if len(lines) > max_lines:
+            truncated_lines = lines[:max_lines//2] + [
+                "",
+                f"... [TRUNCATED: {len(lines) - max_lines} lines hidden for readability] ...",
+                ""
+            ] + lines[-max_lines//2:]
+            text = '\n'.join(truncated_lines)
         
         # For better readability, wrap the entire output in a code block
-        # with ansi color preservation using html
+        # with ansi color preservation
         formatted_text = f"```ansi\n{text}\n```"
         
         return formatted_text
@@ -314,12 +324,83 @@ class SummeetsTestRunner:
 
 """
     
+    def _extract_test_summary(self, stdout_text):
+        """Extract test summary information from pytest output."""
+        if not stdout_text:
+            return {}
+        
+        lines = stdout_text.split('\n')
+        summary = {}
+        
+        # Extract test counts from final summary line
+        for line in lines:
+            if " failed" in line and " passed" in line:
+                # Parse line like "37 failed, 120 passed in 6.59s"
+                parts = line.split()
+                for i, part in enumerate(parts):
+                    if part == "failed,":
+                        summary['failed'] = int(parts[i-1])
+                    elif part == "passed":
+                        summary['passed'] = int(parts[i-1])
+                    elif part.startswith("in") and "s" in part:
+                        summary['duration'] = parts[i+1]
+            elif " passed in" in line and "failed" not in line:
+                # Parse line like "120 passed in 6.59s"
+                parts = line.split()
+                for i, part in enumerate(parts):
+                    if part == "passed":
+                        summary['passed'] = int(parts[i-1])
+                        summary['failed'] = 0
+                    elif part.startswith("in") and "s" in part:
+                        summary['duration'] = parts[i+1]
+        
+        # Extract coverage percentage if present
+        for line in lines:
+            if "TOTAL" in line and "%" in line:
+                parts = line.split()
+                for part in parts:
+                    if "%" in part:
+                        summary['coverage'] = part
+                        break
+        
+        return summary
+    
+    def _write_test_summary(self, file_handle, stdout_text):
+        """Write a concise test summary section."""
+        summary = self._extract_test_summary(stdout_text)
+        
+        if summary:
+            file_handle.write("## Test Results Summary\n\n")
+            
+            if 'passed' in summary:
+                file_handle.write(f"- **Passed**: {summary['passed']} tests\n")
+            if 'failed' in summary:
+                file_handle.write(f"- **Failed**: {summary['failed']} tests\n")
+            if 'duration' in summary:
+                file_handle.write(f"- **Duration**: {summary['duration']}\n")
+            if 'coverage' in summary:
+                file_handle.write(f"- **Coverage**: {summary['coverage']}\n")
+            
+            # Calculate success rate
+            if 'passed' in summary and 'failed' in summary:
+                total = summary['passed'] + summary['failed']
+                success_rate = (summary['passed'] / total * 100) if total > 0 else 0
+                file_handle.write(f"- **Success Rate**: {success_rate:.1f}%\n")
+            
+            file_handle.write("\n")
+    
     def _execute_command(self, cmd, capture_output=False, test_type=None):
         """Execute a command and return the exit code, optionally saving output to report."""
         try:
+            # Use PowerShell wrapper for Windows compatibility
+            if cmd[0] in ['python', 'pytest', 'mypy', 'ruff', 'black', 'bandit']:
+                powershell_cmd = ['powershell.exe', '-Command'] + cmd
+            else:
+                powershell_cmd = cmd
+            
             if test_type:
                 # Capture output for reporting
-                result = subprocess.run(cmd, capture_output=True, text=True)
+                result = subprocess.run(powershell_cmd, capture_output=True, text=True)
                 
                 # Generate report
                 report_filename = self._generate_report_filename(test_type)
@@ -334,9 +415,13 @@ class SummeetsTestRunner:
                     f.write("## Test Execution Details\n\n")
                     f.write(f"- **Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                     f.write(f"- **Test Type**: {test_type.upper()}\n")
-                    f.write(f"- **Command**: `{' '.join(cmd)}`\n")
-                    f.write(f"- **Exit Code**: {result.returncode} {'✅' if result.returncode == 0 else '❌'}\n")
+                    f.write(f"- **Command**: `{' '.join(powershell_cmd)}`\n")
+                    f.write(f"- **Exit Code**: {result.returncode} {'[SUCCESS]' if result.returncode == 0 else '[FAILED]'}\n")
                     f.write(f"- **Status**: {'SUCCESS' if result.returncode == 0 else 'FAILED'}\n\n")
+                    
+                    # Add test summary (extracted from output)
+                    if result.stdout:
+                        self._write_test_summary(f, result.stdout)
                     
                     # Add color coding legend
                     f.write(self._add_color_coding_legend())
@@ -355,13 +440,13 @@ class SummeetsTestRunner:
                         f.write(formatted_stderr)
                         f.write("\n\n")
                     
-                    # Summary section
-                    f.write("## Summary\n\n")
+                    # Execution summary section
+                    f.write("## Execution Summary\n\n")
                     if result.returncode == 0:
-                        f.write("✅ **Test execution completed successfully**\n\n")
+                        f.write("[SUCCESS] **Test execution completed successfully**\n\n")
                         f.write("All tests passed without errors.\n")
                     else:
-                        f.write("❌ **Test execution failed**\n\n")
+                        f.write("[FAILED] **Test execution failed**\n\n")
                         f.write("Please review the error output above for details.\n")
                     
                     # Footer
@@ -373,18 +458,18 @@ class SummeetsTestRunner:
                 if result.stderr:
                     print(result.stderr)
                 
-                print(f"\n📄 Test report saved: {report_path}")
+                print(f"\n[REPORT] Test report saved: {report_path}")
                 return result.returncode
             else:
                 # Original behavior for non-test commands
                 if capture_output:
-                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    result = subprocess.run(powershell_cmd, capture_output=True, text=True)
                 else:
-                    result = subprocess.run(cmd)
+                    result = subprocess.run(powershell_cmd)
                 return result.returncode
                 
         except FileNotFoundError:
-            error_msg = f"   ❌ Command not found: {cmd[0]}"
+            error_msg = f"   [ERROR] Command not found: {cmd[0]}"
             print(error_msg)
             
             if test_type:
@@ -396,15 +481,15 @@ class SummeetsTestRunner:
                     f.write("## Test Execution Details\n\n")
                     f.write(f"- **Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                     f.write(f"- **Test Type**: {test_type.upper()}\n")
-                    f.write(f"- **Command**: `{' '.join(cmd)}`\n")
-                    f.write(f"- **Status**: COMMAND ERROR ❌\n\n")
+                    f.write(f"- **Command**: `{' '.join(powershell_cmd)}`\n")
+                    f.write(f"- **Status**: COMMAND ERROR [FAILED]\n\n")
                     f.write("## Error Details\n\n")
                     f.write(f"```\n{error_msg}\n```\n")
                     f.write(f"\n---\n*Report generated by Summeets Test Runner on {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}*\n")
             
             return 1
         except Exception as e:
-            error_msg = f"   ❌ Error executing command: {e}"
+            error_msg = f"   [ERROR] Error executing command: {e}"
             print(error_msg)
             
             if test_type:
@@ -416,8 +501,8 @@ class SummeetsTestRunner:
                     f.write("## Test Execution Details\n\n")
                     f.write(f"- **Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                     f.write(f"- **Test Type**: {test_type.upper()}\n")
-                    f.write(f"- **Command**: `{' '.join(cmd)}`\n")
-                    f.write(f"- **Status**: COMMAND ERROR ❌\n\n")
+                    f.write(f"- **Command**: `{' '.join(powershell_cmd)}`\n")
+                    f.write(f"- **Status**: COMMAND ERROR [FAILED]\n\n")
                     f.write("## Error Details\n\n")
                     f.write(f"```\n{error_msg}\n```\n")
                     f.write(f"\n---\n*Report generated by Summeets Test Runner on {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}*\n")
@@ -484,9 +569,9 @@ Examples:
     
     runner = SummeetsTestRunner()
     
-    print(f"🧪 Summeets Test Runner")
-    print(f"📍 Project root: {runner.project_root}")
-    print(f"🎯 Mode: {args.mode}")
+    print("[TEST] Summeets Test Runner")
+    print(f"[INFO] Project root: {runner.project_root}")
+    print(f"[MODE] Mode: {args.mode}")
     print("=" * 50)
     
     start_time = time.time()
@@ -535,7 +620,7 @@ Examples:
     elif args.mode == "profile":
         result = runner.run_with_profile(verbose=args.verbose)
     else:
-        print(f"❌ Unknown mode: {args.mode}")
+        print(f"[ERROR] Unknown mode: {args.mode}")
         return 1
     
     # Report results
@@ -543,9 +628,9 @@ Examples:
     print("=" * 50)
     
     if result == 0:
-        print(f"✅ Tests completed successfully in {elapsed_time:.2f}s")
+        print(f"[SUCCESS] Tests completed successfully in {elapsed_time:.2f}s")
     else:
-        print(f"❌ Tests failed in {elapsed_time:.2f}s")
+        print(f"[FAILED] Tests failed in {elapsed_time:.2f}s")
     
     return result
 
