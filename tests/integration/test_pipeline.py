@@ -8,9 +8,9 @@ from unittest.mock import Mock, patch, MagicMock
 import tempfile
 import json
 
-from core.transcribe.pipeline import TranscriptionPipeline
-from core.models import Segment, Word
-from core.utils.exceptions import TranscriptionError, FileOperationError
+from src.transcribe.pipeline import TranscriptionPipeline
+from src.models import Segment, Word
+from src.utils.exceptions import TranscriptionError, FileOperationError
 
 
 @pytest.fixture
@@ -237,7 +237,7 @@ class TestTranscriptionPipeline:
     
     def test_convenience_function(self, mock_audio_file, tmp_path):
         """Test the convenience run() function."""
-        from core.transcribe.new_pipeline import run
+        from src.transcribe.new_pipeline import run
         
         with patch('core.transcribe.new_pipeline.TranscriptionPipeline') as mock_pipeline_class:
             mock_pipeline = Mock()

@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from core.utils.validation import (
+from src.utils.validation import (
     sanitize_path_input,
     validate_audio_path,
     validate_output_directory,

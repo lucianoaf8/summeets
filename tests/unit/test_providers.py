@@ -7,9 +7,9 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 import json
 
-from core.providers.openai_client import client as openai_client, summarize_text as openai_summarize_text, summarize_chunks as openai_summarize_chunks
-from core.providers.anthropic_client import client as anthropic_client, summarize_text as anthropic_summarize_text, summarize_chunks as anthropic_summarize_chunks
-from core.utils.exceptions import SummeetsError
+from src.providers.openai_client import client as openai_client, summarize_text as openai_summarize_text, summarize_chunks as openai_summarize_chunks
+from src.providers.anthropic_client import client as anthropic_client, summarize_text as anthropic_summarize_text, summarize_chunks as anthropic_summarize_chunks
+from src.utils.exceptions import SummeetsError
 
 
 class TestOpenAIClient:

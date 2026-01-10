@@ -149,7 +149,7 @@ def mock_replicate_output():
 @pytest.fixture
 def mock_settings():
     """Mock application settings for testing."""
-    from core.utils.config import Settings
+    from src.utils.config import Settings
     
     settings = Settings()
     settings.ffmpeg_bin = "ffmpeg"

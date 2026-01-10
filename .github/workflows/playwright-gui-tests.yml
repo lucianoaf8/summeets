@@ -1,0 +1,229 @@
+name: Playwright GUI Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: 'Test suite to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - smoke
+        - complete-workflow
+        - gui-interactions
+
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
+        cache: 'npm'
+        
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Cache Python dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        
+    - name: Install Node dependencies (Electron)
+      run: npm ci
+      
+    - name: Install Node dependencies (Playwright)
+      run: |
+        npm install --save-dev @playwright/test@^1.48.0 @types/node@^20.14.0 typescript@^5.5.0
+        
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps electron
+      
+    - name: Prepare test environment
+      run: |
+        # Create necessary directories
+        mkdir -p data/video
+        mkdir -p data/audio
+        mkdir -p data/transcript/video_for_testing
+        mkdir -p data/output
+        mkdir -p logs
+        mkdir -p tests/reports
+        
+        # Create a dummy test video file for CI
+        echo "Mock video content for CI testing" > data/video/video_for_testing.mp4
+        
+        # Create a dummy transcript file for testing
+        echo '{"segments": [{"speaker": "Speaker 1", "text": "This is a test transcript"}]}' > data/transcript/video_for_testing/video_for_testing.json
+        
+    - name: Verify environment setup
+      run: |
+        echo "Python version: $(python --version)"
+        echo "Node version: $(node --version)"
+        echo "NPM version: $(npm --version)"
+        echo "Playwright version: $(npx playwright --version)"
+        
+        # Verify file structure
+        ls -la data/
+        ls -la data/video/
+        
+        # Test Python package installation
+        python -c "import summeets; print('Summeets package installed successfully')" || echo "Summeets package not found - continuing with mock environment"
+        
+    - name: Run Playwright tests (All)
+      if: github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == ''
+      run: npx playwright test --reporter=github
+      env:
+        CI: true
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        
+    - name: Run Playwright tests (Smoke only)
+      if: github.event.inputs.test_suite == 'smoke'
+      run: npx playwright test --grep="GUI Smoke Tests" --reporter=github
+      env:
+        CI: true
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+        
+    - name: Run Playwright tests (Complete Workflow)
+      if: github.event.inputs.test_suite == 'complete-workflow'
+      run: npx playwright test tests/playwright/e2e/complete-workflow.spec.ts --reporter=github
+      env:
+        CI: true
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        
+    - name: Run Playwright tests (GUI Interactions)
+      if: github.event.inputs.test_suite == 'gui-interactions'
+      run: npx playwright test tests/playwright/e2e/gui-interactions.spec.ts --reporter=github
+      env:
+        CI: true
+        
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: playwright-results
+        path: |
+          test-results/
+          tests/reports/
+        retention-days: 30
+        
+    - name: Upload Playwright report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
+        
+    - name: Upload screenshots and videos
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: playwright-debug-artifacts
+        path: |
+          test-results/
+          playwright-report/
+        retention-days: 30
+        
+    - name: Comment test results on PR
+      if: github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          
+          try {
+            // Try to read test results
+            const resultsPath = 'tests/reports/playwright-results.json';
+            if (fs.existsSync(resultsPath)) {
+              const results = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+              
+              const comment = `## 🎭 Playwright GUI Test Results
+              
+              **Status**: ${results.status === 'passed' ? '✅ Passed' : '❌ Failed'}
+              **Tests Run**: ${results.stats?.total || 'Unknown'}
+              **Passed**: ${results.stats?.passed || 'Unknown'}
+              **Failed**: ${results.stats?.failed || 'Unknown'}
+              **Duration**: ${results.stats?.duration || 'Unknown'}ms
+              
+              ${results.status === 'failed' ? '❗ Check the [detailed report](${{ steps.deploy.outputs.page_url }}) for more information.' : ''}
+              `;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
+          } catch (error) {
+            console.log('Could not post test results comment:', error);
+          }
+
+  # Separate job for performance testing (optional)
+  performance-test:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
+        
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        pip install -e .
+        npm ci
+        npm install --save-dev @playwright/test
+        npx playwright install --with-deps electron
+        
+    - name: Run performance tests
+      run: npx playwright test --grep="Performance Tests" --reporter=github
+      env:
+        CI: true
+        
+    - name: Upload performance results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: performance-results
+        path: test-results/
+        retention-days: 7

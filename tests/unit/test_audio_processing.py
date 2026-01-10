@@ -8,14 +8,14 @@ from unittest.mock import patch, Mock, call
 import subprocess
 import json
 
-from core.audio.ffmpeg_ops import (
+from src.audio.ffmpeg_ops import (
     probe, normalize_loudness, extract_audio_copy, extract_audio_reencode,
     increase_audio_volume, convert_audio_format, extract_audio_from_video,
     ensure_wav16k_mono, ffprobe_info
 )
-from core.audio.selection import pick_best_audio, score_audio_file, get_audio_files
-from core.audio.compression import compress_audio_for_upload, get_file_size_mb
-from core.utils.exceptions import AudioProcessingError
+from src.audio.selection import pick_best_audio, score_audio_file, get_audio_files
+from src.audio.compression import compress_audio_for_upload, get_file_size_mb
+from src.utils.exceptions import AudioProcessingError
 
 
 class TestFFmpegOperations:
@@ -523,7 +523,7 @@ class TestAudioValidation:
     
     def test_validate_ffmpeg_binaries(self):
         """Test validation of FFmpeg binary availability."""
-        from core.audio.ffmpeg_ops import _validate_ffmpeg_binaries
+        from src.audio.ffmpeg_ops import _validate_ffmpeg_binaries
         
         with patch('shutil.which') as mock_which:
             # Test when binaries are available
@@ -537,7 +537,7 @@ class TestAudioValidation:
     
     def test_audio_format_detection(self, audio_file_samples):
         """Test automatic audio format detection."""
-        from core.audio.selection import detect_audio_format
+        from src.audio.selection import detect_audio_format
         
         for ext, sample in audio_file_samples.items():
             if ext.startswith('.') and ext != 'corrupted':
@@ -547,7 +547,7 @@ class TestAudioValidation:
     
     def test_audio_duration_validation(self):
         """Test audio duration validation."""
-        from core.audio.selection import validate_audio_duration
+        from src.audio.selection import validate_audio_duration
         
         # Valid duration
         assert validate_audio_duration(300.0)  # 5 minutes

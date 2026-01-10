@@ -6,13 +6,13 @@ import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from core.utils.config_manager import (
+from src.utils.config_manager import (
     ConfigManager, config_manager,
     get_provider, get_model, get_api_key, get_output_directory,
     get_ffmpeg_binary, get_ffprobe_binary, validate_configuration,
     get_configuration_summary
 )
-from core.utils.exceptions import ConfigurationError
+from src.utils.exceptions import ConfigurationError
 
 
 class TestConfigManager:
@@ -347,7 +347,7 @@ class TestGlobalConfigManagerInstance:
     
     def test_global_instance_is_singleton(self):
         """Test that imports reference the same instance."""
-        from core.utils.config_manager import config_manager as imported_manager
+        from src.utils.config_manager import config_manager as imported_manager
         
         assert imported_manager is config_manager
 

@@ -7,13 +7,13 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import json
 
-from core.summarize.pipeline import (
+from src.summarize.pipeline import (
     run as summarize_run, load_transcript, chunk_transcript,
     map_reduce_summarize, chain_of_density_pass
 )
-from core.summarize.templates import SummaryTemplates, detect_meeting_type, format_sop_output
-from core.models import SummaryTemplate
-from core.utils.exceptions import SummeetsError, LLMProviderError
+from src.summarize.templates import SummaryTemplates, detect_meeting_type, format_sop_output
+from src.models import SummaryTemplate
+from src.utils.exceptions import SummeetsError, LLMProviderError
 
 
 class TestSummarizationPipelineIntegration:
@@ -331,7 +331,7 @@ Team actively engaged with targeted questions about customer acquisition numbers
         output_dir.mkdir()
         
         # Mock failure then success
-        from core.utils.exceptions import RateLimitError
+        from src.utils.exceptions import RateLimitError
         
         responses = [
             RateLimitError("Rate limit exceeded"),  # First call fails

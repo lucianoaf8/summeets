@@ -8,10 +8,10 @@ from unittest.mock import Mock, patch, MagicMock
 import json
 import time
 
-from core.transcribe.pipeline import TranscriptionPipeline, run as transcribe_run
-from core.transcribe.replicate_api import ReplicateTranscriber
-from core.transcribe.formatting import format_transcript_output, parse_replicate_output
-from core.utils.exceptions import TranscriptionError, AudioProcessingError
+from src.transcribe.pipeline import TranscriptionPipeline, run as transcribe_run
+from src.transcribe.replicate_api import ReplicateTranscriber
+from src.transcribe.formatting import format_transcript_output, parse_replicate_output
+from src.utils.exceptions import TranscriptionError, AudioProcessingError
 
 
 class TestTranscriptionPipelineIntegration:
@@ -95,7 +95,7 @@ class TestTranscriptionPipelineIntegration:
             mock_format.return_value = {"json": expected_json}
             
             # Re-run just the save step to verify formatting
-            from core.models import Segment
+            from src.models import Segment
             segments = [
                 Segment(0.0, 5.432, "Good morning everyone, welcome to our quarterly review meeting.", "SPEAKER_00"),
                 Segment(5.432, 12.156, "I'd like to start by reviewing our performance metrics from Q3.", "SPEAKER_00")
@@ -257,8 +257,8 @@ class TestTranscriptionPipelineIntegration:
     
     def test_transcript_formatting_integration(self, sample_transcript_segments, tmp_path):
         """Test transcript formatting with multiple output formats."""
-        from core.models import Segment
-        from core.transcribe.formatting import format_transcript_output
+        from src.models import Segment
+        from src.transcribe.formatting import format_transcript_output
         
         # Convert sample data to Segment objects
         segments = []

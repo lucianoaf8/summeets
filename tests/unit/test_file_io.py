@@ -8,13 +8,13 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, mock_open
 
-from core.utils.file_io import (
+from src.utils.file_io import (
     read_json_file, write_json_file, read_text_file, write_text_file,
     read_lines_file, write_lines_file, ensure_directory, safe_remove_file,
     copy_file, move_file, get_file_size, list_files_with_extension,
     create_timestamped_directory, backup_file
 )
-from core.utils.exceptions import SummeetsError
+from src.utils.exceptions import SummeetsError
 
 
 class TestJSONOperations:

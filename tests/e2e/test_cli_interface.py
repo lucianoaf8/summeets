@@ -11,7 +11,7 @@ import subprocess
 from typer.testing import CliRunner
 
 from cli.app import app, main
-from core.utils.exceptions import SummeetsError
+from src.utils.exceptions import SummeetsError
 
 
 class TestCLIBasicCommands:

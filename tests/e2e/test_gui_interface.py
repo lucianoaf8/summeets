@@ -203,7 +203,7 @@ class TestGUIProcessingWorkflow:
         
         # Mock GUI button click handler
         def start_processing_handler(state):
-            from core.workflow import WorkflowConfig, execute_workflow
+            from src.workflow import WorkflowConfig, execute_workflow
             
             config = WorkflowConfig(
                 input_file=Path(state["input_file"]),
@@ -244,7 +244,7 @@ class TestGUIProcessingWorkflow:
             mock_execute.side_effect = mock_workflow_with_progress
             
             # Execute with progress callback
-            from core.workflow import WorkflowConfig
+            from src.workflow import WorkflowConfig
             config = WorkflowConfig(
                 input_file=self.test_audio,
                 output_dir=self.temp_dir / "output"
@@ -278,7 +278,7 @@ class TestGUIProcessingWorkflow:
         with patch('core.workflow.execute_workflow', side_effect=mock_workflow_with_cancellation):
             # Start processing in background
             def start_processing():
-                from core.workflow import WorkflowConfig
+                from src.workflow import WorkflowConfig
                 config = WorkflowConfig(
                     input_file=self.test_audio,
                     output_dir=self.temp_dir / "output"

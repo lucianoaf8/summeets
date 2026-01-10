@@ -7,6 +7,9 @@ pydantic>=2.7,<3.0
 pydantic-settings>=2.3,<3.0
 python-dotenv>=1.0.1,<2.0
 
+# TUI
+textual>=0.73,<0.99
+
 # LLM providers
 openai>=1.40.0,<2.0
 anthropic>=0.34.1,<1.0

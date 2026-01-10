@@ -47,7 +47,7 @@ class TestAudioProcessingPerformance:
     @patch('subprocess.run')
     def test_audio_extraction_performance(self, mock_run, large_audio_metadata):
         """Test audio extraction performance with large files."""
-        from core.audio.ffmpeg_ops import extract_audio_from_video
+        from src.audio.ffmpeg_ops import extract_audio_from_video
         
         mock_run.return_value.returncode = 0
         mock_run.return_value.stderr = ""
@@ -77,7 +77,7 @@ class TestAudioProcessingPerformance:
     @patch('subprocess.run')
     def test_audio_compression_performance(self, mock_run):
         """Test audio compression performance."""
-        from core.audio.compression import compress_audio_for_upload
+        from src.audio.compression import compress_audio_for_upload
         
         mock_run.return_value.returncode = 0
         mock_run.return_value.stderr = ""
@@ -99,7 +99,7 @@ class TestAudioProcessingPerformance:
     
     def test_audio_selection_performance(self):
         """Test performance of audio file ranking with many files."""
-        from core.audio.selection import rank_audio_files
+        from src.audio.selection import rank_audio_files
         
         # Create list of many mock audio files
         audio_files = []
@@ -132,7 +132,7 @@ class TestTranscriptionPerformance:
     
     def test_transcript_chunking_performance(self):
         """Test performance of transcript chunking with large transcripts."""
-        from core.summarize.pipeline import chunk_transcript
+        from src.summarize.pipeline import chunk_transcript
         
         # Create large transcript with many segments
         large_transcript = []
@@ -160,7 +160,7 @@ class TestTranscriptionPerformance:
     @patch('core.transcribe.replicate_api.ReplicateTranscriber')
     def test_transcription_pipeline_performance(self, mock_transcriber_class):
         """Test transcription pipeline performance."""
-        from core.transcribe.pipeline import TranscriptionPipeline
+        from src.transcribe.pipeline import TranscriptionPipeline
         
         # Mock fast transcription response
         mock_transcriber = Mock()
@@ -205,7 +205,7 @@ class TestSummarizationPerformance:
     @patch('core.providers.openai_client.create_openai_summary')
     def test_summarization_performance(self, mock_openai_summary):
         """Test summarization performance with large transcripts."""
-        from core.summarize.pipeline import summarize_run
+        from src.summarize.pipeline import summarize_run
         
         # Mock fast summary response
         mock_openai_summary.return_value = {
@@ -256,7 +256,7 @@ class TestSummarizationPerformance:
     
     def test_chain_of_density_performance(self):
         """Test Chain-of-Density processing performance."""
-        from core.summarize.pipeline import apply_chain_of_density
+        from src.summarize.pipeline import apply_chain_of_density
         
         initial_summary = "This is a basic summary. " * 100  # Long initial summary
         
@@ -295,7 +295,7 @@ class TestWorkflowPerformance:
     @patch('core.workflow.summarize_run')
     def test_full_workflow_performance(self, mock_summarize, mock_transcribe, mock_extract):
         """Test performance of complete video-to-summary workflow."""
-        from core.workflow import WorkflowEngine, WorkflowConfig
+        from src.workflow import WorkflowEngine, WorkflowConfig
         
         temp_dir = Path(tempfile.mkdtemp())
         video_file = temp_dir / "test_video.mp4"
@@ -338,7 +338,7 @@ class TestWorkflowPerformance:
     
     def test_concurrent_workflow_performance(self):
         """Test performance of concurrent workflow execution."""
-        from core.workflow import WorkflowEngine, WorkflowConfig
+        from src.workflow import WorkflowEngine, WorkflowConfig
         
         temp_dir = Path(tempfile.mkdtemp())
         
@@ -507,7 +507,7 @@ class TestScalabilityLimits:
     
     def test_maximum_audio_duration_handling(self):
         """Test handling of very long audio files."""
-        from core.utils.validation import validate_audio_duration
+        from src.utils.validation import validate_audio_duration
         
         # Test various durations
         test_durations = [

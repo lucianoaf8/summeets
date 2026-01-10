@@ -395,7 +395,7 @@ def mock_file_operations():
 @pytest.fixture
 def mock_configuration():
     """Mock application configuration for testing."""
-    from core.utils.config import Settings
+    from src.utils.config import Settings
     
     settings = Settings()
     settings.provider = "openai"

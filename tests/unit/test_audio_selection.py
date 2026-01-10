@@ -7,14 +7,14 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, Mock
 
-from core.audio.selection import (
+from src.audio.selection import (
     get_audio_files, 
     score_audio_file, 
     pick_best_audio,
     SUPPORTED_EXTS,
     FORMAT_SCORES
 )
-from core.utils.exceptions import ValidationError
+from src.utils.exceptions import ValidationError
 
 
 class TestGetAudioFiles:

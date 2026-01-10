@@ -8,8 +8,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
-    from core.summarize.templates import SummaryTemplates, detect_meeting_type
-    from core.models import SummaryTemplate
+    from src.summarize.templates import SummaryTemplates, detect_meeting_type
+    from src.models import SummaryTemplate
 except ImportError as e:
     print(f"Import error: {e}")
     print("This test requires the dependencies to be installed.")
@@ -56,6 +56,14 @@ def test_template_system():
         [Member1]: What if we use social media influencers?
         [Member2]: Maybe we could create an interactive website experience.
         [Leader]: Great ideas! Any other suggestions?
+        """,
+        
+        "Requirements meeting": """
+        [Product Manager]: We need to review the requirements for the new user dashboard.
+        [Stakeholder]: The system must support at least 1000 concurrent users.
+        [Designer]: I have the layout templates and report formats ready for review.
+        [Developer]: What are the acceptance criteria for the search functionality?
+        [PM]: The search feature should return results within 2 seconds.
         """,
         
         "General meeting": """

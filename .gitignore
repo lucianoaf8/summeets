@@ -1,3 +1,8 @@
+# Custom
+/data/
+/archive/
+/_legacy/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -245,10 +250,6 @@ logs/
 *.tar.bz2
 
 # Generated transcripts and summaries (can be regenerated)
-*.json
-*.srt
-*.txt
-*.md
 !README.md
 !CLAUDE.md
 !pyproject.toml
@@ -280,7 +281,5 @@ tests/reports/
 trash/
 
 !requirements.txt
-data/input/*
-data/output/*
 .claude/
 node_modules

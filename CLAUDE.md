@@ -15,9 +15,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Architecture
 The project follows clean architecture principles with clear separation of concerns:
-- **Core Module**: Shared business logic, models, and utilities
-- **CLI Interface**: Typer-based command-line interface
-- **GUI Interface**: Electron-based graphical user interface
+- **Source Module** (`src/`): Shared business logic, models, and utilities
+- **CLI Interface** (`cli/`): Typer-based command-line interface + Textual TUI
+- **GUI Interface** (`electron/`): Electron-based graphical user interface
 - **Main Entry Point**: Router that launches CLI or GUI based on arguments
 
 ## Dependencies
@@ -110,7 +110,7 @@ python main.py gui
 ### Clean Architecture Structure
 ```
 summeets/
-├─ core/                    # Shared processing core
+├─ src/                     # Shared processing core
 │  ├─ models.py             # Pydantic data models & job tracking
 │  ├─ workflow.py           # Flexible workflow engine
 │  ├─ audio/                # Audio/video processing
@@ -135,7 +135,12 @@ summeets/
 │     ├─ security.py        # Security utilities
 │     ├─ validation.py      # Input validation (video/audio/transcript)
 │     └─ exceptions.py      # Custom exceptions
-├─ cli/app.py               # Typer CLI interface
+├─ cli/                     # CLI interface
+│  ├─ app.py                # Typer CLI commands
+│  └─ tui/                  # Textual TUI application
+│     ├─ app.py             # Main TUI app
+│     ├─ widgets.py         # Custom widgets
+│     └─ demo.py            # Demo/test mode
 ├─ electron/                # Electron GUI application
 │  ├─ main.js               # Electron main process
 │  ├─ index.html            # GUI interface
@@ -155,19 +160,19 @@ summeets/
 
 ### Core Components
 
-- **Workflow Engine** (`core.workflow`): Flexible pipeline supporting video/audio/transcript inputs
-- **Audio/Video Processing** (`core.audio.ffmpeg_ops`): FFmpeg-based operations including:
+- **Workflow Engine** (`src.workflow`): Flexible pipeline supporting video/audio/transcript inputs
+- **Audio/Video Processing** (`src.audio.ffmpeg_ops`): FFmpeg-based operations including:
   - Video to audio extraction with quality settings
   - Audio normalization and volume adjustment
   - Format conversion (m4a, mp3, wav, flac, ogg)
   - Video metadata extraction
-- **Audio Selection** (`core.audio.selection`): Intelligently selects highest quality audio from directories
-- **Transcription Pipeline** (`core.transcribe.pipeline`): Replicate API integration with progress tracking
-- **Summarization Pipeline** (`core.summarize.pipeline`): Map-reduce chunking + Chain-of-Density refinement
-- **LLM Providers** (`core.providers`): Unified interface for OpenAI and Anthropic APIs
-- **Configuration** (`core.utils.config`): Pydantic-based settings with environment variable support
-- **Job Management** (`core.utils.jobs`): State persistence and progress tracking
-- **Validation** (`core.utils.validation`): Input validation for video, audio, and transcript files
+- **Audio Selection** (`src.audio.selection`): Intelligently selects highest quality audio from directories
+- **Transcription Pipeline** (`src.transcribe.pipeline`): Replicate API integration with progress tracking
+- **Summarization Pipeline** (`src.summarize.pipeline`): Map-reduce chunking + Chain-of-Density refinement
+- **LLM Providers** (`src.providers`): Unified interface for OpenAI and Anthropic APIs
+- **Configuration** (`src.utils.config`): Pydantic-based settings with environment variable support
+- **Job Management** (`src.utils.jobs`): State persistence and progress tracking
+- **Validation** (`src.utils.validation`): Input validation for video, audio, and transcript files
 
 ### Data Models
 
@@ -200,7 +205,7 @@ The tool automatically detects file type and adjusts the workflow accordingly:
 ### Code Quality Tools
 ```bash
 # Type checking
-mypy core/ cli/
+mypy src/ cli/
 
 # Linting
 ruff check .

@@ -8,7 +8,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 from typing import Dict, Any
 
-from core.models import (
+from src.models import (
     AudioFormat, ProcessingStatus, Provider, FileType, SummaryTemplate,
     Word, Segment, AudioMetadata, TranscriptionJob, SummarizationJob,
     ProcessingPipeline, ProcessingResults, JobManager, TranscriptData, SummaryData

@@ -7,11 +7,11 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any
 
-from core.workflow import (
+from src.workflow import (
     WorkflowStep, WorkflowConfig, WorkflowEngine, execute_workflow
 )
-from core.models import TranscriptData, SummaryData
-from core.utils.exceptions import SummeetsError, ValidationError
+from src.models import TranscriptData, SummaryData
+from src.utils.exceptions import SummeetsError, ValidationError
 
 
 class TestWorkflowStep:
@@ -558,7 +558,7 @@ class TestWorkflowSteps:
             
             engine = WorkflowEngine(config)
             # Set up transcript data
-            from core.models import TranscriptData
+            from src.models import TranscriptData
             engine.current_transcript = TranscriptData(
                 segments=[],
                 duration=0.0,

@@ -1,19 +1,20 @@
 import typer
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 from rich.console import Console
 from rich.table import Table
 
-from core.utils.logging import setup_logging
-from core.utils.config_manager import get_configuration_summary
-from core.transcribe import transcribe_audio
-from core.summarize.pipeline import run as summarize_transcript
-from core.summarize.templates import SummaryTemplates
-from core.models import SummaryTemplate
-from core.utils.fsio import get_data_manager
-from core.utils.validation import sanitize_path_input, validate_transcript_file, validate_output_dir, validate_model_name
-from core.utils.exceptions import ValidationError
+from src.utils.logging import setup_logging
+from src.utils.config import SETTINGS, get_configuration_summary
+from src.transcribe import transcribe_audio
+from src.summarize.pipeline import run as summarize_transcript
+from src.summarize.templates import SummaryTemplates
+from src.models import SummaryTemplate
+from src.utils.fsio import get_data_manager
+from src.utils.validation import sanitize_path_input, validate_transcript_file, validate_output_dir, validate_model_name, detect_file_type
+from src.utils.exceptions import ValidationError
+from src.workflow import WorkflowConfig, execute_workflow
 
 app = typer.Typer(add_completion=False, help="Summeets - Transcribe and summarize meetings")
 console = Console()
@@ -22,37 +23,95 @@ console = Console()
 def _init(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
     log_file: bool = typer.Option(True, "--log-file/--no-log-file", help="Write logs to file")
-):
+) -> None:
     """Initialize logging for all commands."""
     setup_logging(logging.DEBUG if verbose else logging.INFO, log_file=log_file)
 
 
 @app.command("transcribe")
 def cmd_transcribe(
-    audio: Optional[Path] = typer.Argument(None, help="Audio file or directory"),
+    input_file: Optional[Path] = typer.Argument(None, help="Video or audio file"),
     output_dir: Path = typer.Option(Path("out"), "--output", "-o", help="Output directory")
-):
-    """Transcribe audio using Whisper + diarization."""
+) -> None:
+    """Transcribe video/audio using Whisper + diarization."""
     try:
         # Input validation
-        if audio:
-            audio_str = sanitize_path_input(str(audio))
-            audio = Path(audio_str)
-        
+        if not input_file:
+            input_file_str = typer.prompt("Enter video or audio file path")
+            input_file = Path(sanitize_path_input(input_file_str))
+        else:
+            input_file_str = sanitize_path_input(str(input_file))
+            input_file = Path(input_file_str)
+
+        if not input_file.exists():
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+
         output_str = sanitize_path_input(str(output_dir))
         output_dir = Path(output_str)
         validate_output_dir(output_dir)
-        
-        json_path, srt_path, audit_path = transcribe_audio(
-            audio_path=audio,
-            output_dir=output_dir
-        )
-        console.print(f"[green]✓[/green] Transcription complete:")
-        console.print(f"  JSON: [cyan]{json_path}[/cyan]")
-        console.print(f"  SRT: [cyan]{srt_path}[/cyan]")
-        console.print(f"  Audit: [cyan]{audit_path}[/cyan]")
+
+        # Detect file type
+        file_type = detect_file_type(input_file)
+        console.print(f"[cyan]Detected file type:[/cyan] {file_type}")
+
+        if file_type == "transcript":
+            console.print("[yellow]Warning:[/yellow] File is already a transcript")
+            raise typer.Exit(0)
+
+        # Use workflow for video files, direct transcribe for audio
+        if file_type == "video":
+            console.print("[yellow]Video file detected - extracting audio first...[/yellow]")
+
+            # Create workflow configuration for video transcription
+            config = WorkflowConfig(
+                input_file=input_file,
+                output_dir=output_dir,
+                extract_audio=True,
+                process_audio=True,
+                transcribe=True,
+                summarize=False,  # Only transcribe, don't summarize
+                audio_format="m4a",
+                audio_quality="high",
+                normalize_audio=True
+            )
+
+            # Execute workflow
+            def progress_callback(step: int, total: int, step_name: str, status: str) -> None:
+                console.print(f"[yellow]Step {step}/{total}:[/yellow] {status}")
+
+            results = execute_workflow(config, progress_callback)
+
+            # Extract transcript file path from results
+            for step_name, step_results in results.items():
+                if step_name == "transcribe" and isinstance(step_results, dict):
+                    if "transcript_file" in step_results:
+                        json_path = Path(step_results["transcript_file"])
+                        srt_path = json_path.with_suffix('.srt')
+                        audit_path = json_path.with_suffix('.audit.json')
+
+                        console.print(f"[green]✓[/green] Transcription complete:")
+                        console.print(f"  JSON: [cyan]{json_path}[/cyan]")
+                        if srt_path.exists():
+                            console.print(f"  SRT: [cyan]{srt_path}[/cyan]")
+                        if audit_path.exists():
+                            console.print(f"  Audit: [cyan]{audit_path}[/cyan]")
+                        break
+        else:
+            # Direct transcription for audio files
+            json_path, srt_path, audit_path = transcribe_audio(
+                audio_path=input_file,
+                output_dir=output_dir
+            )
+            console.print(f"[green]✓[/green] Transcription complete:")
+            console.print(f"  JSON: [cyan]{json_path}[/cyan]")
+            console.print(f"  SRT: [cyan]{srt_path}[/cyan]")
+            console.print(f"  Audit: [cyan]{audit_path}[/cyan]")
+
     except ValidationError as e:
         console.print(f"[red]Validation Error: {e}[/red]")
+        raise typer.Exit(1)
+    except FileNotFoundError as e:
+        console.print(f"[red]File Error: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -61,14 +120,14 @@ def cmd_transcribe(
 @app.command("summarize")
 def cmd_summarize(
     transcript: Path = typer.Argument(..., help="Transcript JSON or SRT file"),
-    provider: str = typer.Option("openai", "--provider", "-p", help="LLM provider: openai|anthropic"),
-    model: str = typer.Option("gpt-4o-mini", "--model", "-m", help="Model name"),
+    provider: str = typer.Option(SETTINGS.provider, "--provider", "-p", help="LLM provider: openai|anthropic"),
+    model: str = typer.Option(SETTINGS.model, "--model", "-m", help="Model name"),
     chunk_seconds: int = typer.Option(1800, "--chunk-seconds", help="Chunk size in seconds"),
     cod_passes: int = typer.Option(2, "--cod-passes", help="Chain-of-Density passes"),
     max_tokens: int = typer.Option(3000, "--max-tokens", help="Max output tokens"),
-    template: str = typer.Option("default", "--template", "-t", help="Summary template: default|sop|decision|brainstorm"),
+    template: str = typer.Option("default", "--template", "-t", help="Summary template: default|sop|decision|brainstorm|requirements"),
     auto_detect: bool = typer.Option(True, "--auto-detect/--no-auto-detect", help="Auto-detect template type")
-):
+) -> None:
     """Summarize meeting transcript using LLM."""
     try:
         # Input validation
@@ -84,8 +143,8 @@ def cmd_summarize(
         model = validate_model_name(model)
         
         # Validate template
-        if template not in ["default", "sop", "decision", "brainstorm"]:
-            raise ValidationError(f"Invalid template '{template}'. Must be one of: default, sop, decision, brainstorm")
+        if template not in ["default", "sop", "decision", "brainstorm", "requirements"]:
+            raise ValidationError(f"Invalid template '{template}'. Must be one of: default, sop, decision, brainstorm, requirements")
         template_enum = SummaryTemplate(template)
         
         # Validate numeric parameters
@@ -96,7 +155,7 @@ def cmd_summarize(
         if max_tokens <= 0:
             raise ValidationError("Max tokens must be positive")
         
-        json_path = summarize_transcript(
+        json_path, md_path = summarize_transcript(
             transcript_path=transcript,
             provider=provider,
             model=model,
@@ -105,10 +164,6 @@ def cmd_summarize(
             template=template_enum,
             auto_detect_template=auto_detect
         )
-        # Get output paths for display
-        output_dir = json_path.parent
-        base_name = transcript.stem
-        md_path = output_dir / f"{base_name}.summary.md"
         
         console.print(f"[green]✓[/green] Summary complete:")
         console.print(f"  Markdown: [cyan]{md_path}[/cyan]")
@@ -126,7 +181,7 @@ def cmd_summarize(
 
 
 @app.command("templates")
-def cmd_templates():
+def cmd_templates() -> None:
     """List available summary templates."""
     console.print("\n[bold]Available Summary Templates:[/bold]\n")
     
@@ -141,7 +196,8 @@ def cmd_templates():
         "default": "General meetings, discussions, status updates",
         "sop": "Training sessions, process documentation, tutorials",
         "decision": "Decision-making meetings, strategy sessions",
-        "brainstorm": "Creative sessions, idea generation, planning"
+        "brainstorm": "Creative sessions, idea generation, planning",
+        "requirements": "Requirements review, criteria analysis, project specifications"
     }
     
     for template_key, description in templates.items():
@@ -157,75 +213,100 @@ def cmd_templates():
 
 @app.command("process")
 def cmd_process(
-    audio: Optional[Path] = typer.Argument(None, help="Audio file or directory"),
+    input_file: Optional[Path] = typer.Argument(None, help="Video, audio, or transcript file"),
     provider: str = typer.Option("openai", "--provider", "-p", help="LLM provider"),
     model: str = typer.Option("gpt-4o-mini", "--model", "-m", help="Model name"),
     output_dir: Path = typer.Option(Path("out"), "--output", "-o", help="Output directory"),
-    template: str = typer.Option("default", "--template", "-t", help="Summary template: default|sop|decision|brainstorm"),
+    template: str = typer.Option("default", "--template", "-t", help="Summary template: default|sop|decision|brainstorm|requirements"),
     auto_detect: bool = typer.Option(True, "--auto-detect/--no-auto-detect", help="Auto-detect template type")
-):
-    """Complete pipeline: transcribe and summarize audio."""
+) -> None:
+    """Complete pipeline: process video/audio/transcript files."""
     console.print("[bold]Starting complete processing pipeline[/bold]")
-    
+
     try:
         # Input validation
-        if audio:
-            audio_str = sanitize_path_input(str(audio))
-            audio = Path(audio_str)
-        
+        if not input_file:
+            input_file_str = typer.prompt("Enter video, audio, or transcript file path")
+            input_file = Path(sanitize_path_input(input_file_str))
+        else:
+            input_file_str = sanitize_path_input(str(input_file))
+            input_file = Path(input_file_str)
+
+        if not input_file.exists():
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+
         output_str = sanitize_path_input(str(output_dir))
         output_dir = Path(output_str)
         validate_output_dir(output_dir)
-        
+
         # Validate provider options
         if provider not in ["openai", "anthropic"]:
             raise ValidationError(f"Invalid provider '{provider}'. Must be 'openai' or 'anthropic'")
-        
+
         # Validate model name
         model = validate_model_name(model)
-        
+
         # Validate template
-        if template not in ["default", "sop", "decision", "brainstorm"]:
-            raise ValidationError(f"Invalid template '{template}'. Must be one of: default, sop, decision, brainstorm")
-        template_enum = SummaryTemplate(template)
-        
-        # Transcribe
-        console.print("\n[yellow]Step 1/2:[/yellow] Transcribing audio...")
-        json_path, srt_path, audit_path = transcribe_audio(
-            audio_path=audio,
-            output_dir=output_dir
-        )
-        console.print(f"[green]✓[/green] Transcription complete")
-        console.print(f"  JSON: [cyan]{json_path}[/cyan]")
-        
-        # Summarize
-        console.print("\n[yellow]Step 2/2:[/yellow] Summarizing transcript...")
-        summary_json = summarize_transcript(
-            transcript_path=json_path,
+        if template not in ["default", "sop", "decision", "brainstorm", "requirements"]:
+            raise ValidationError(f"Invalid template '{template}'. Must be one of: default, sop, decision, brainstorm, requirements")
+
+        # Detect file type
+        file_type = detect_file_type(input_file)
+        console.print(f"[cyan]Detected file type:[/cyan] {file_type}")
+
+        # Create workflow configuration
+        config = WorkflowConfig(
+            input_file=input_file,
+            output_dir=output_dir,
+            # Enable appropriate steps based on file type
+            extract_audio=(file_type == "video"),
+            process_audio=(file_type in ["video", "audio"]),
+            transcribe=(file_type in ["video", "audio"]),
+            summarize=True,
+            # Audio settings
+            audio_format="m4a",
+            audio_quality="high",
+            normalize_audio=True,
+            # Summarization settings
+            summary_template=template,
             provider=provider,
             model=model,
-            template=template_enum,
             auto_detect_template=auto_detect
         )
-        # Get output paths for display
-        output_base = json_path.stem
-        md_path = output_dir / f"{output_base}.summary.md"
-        
-        console.print(f"[green]✓[/green] Summary complete:")
-        console.print(f"  Markdown: [cyan]{md_path}[/cyan]")
-        console.print(f"  JSON: [cyan]{summary_json}[/cyan]")
-        
+
+        # Define progress callback
+        def progress_callback(step: int, total: int, step_name: str, status: str) -> None:
+            console.print(f"[yellow]Step {step}/{total}:[/yellow] {status}")
+
+        # Execute workflow
+        results = execute_workflow(config, progress_callback)
+
+        # Display results
         console.print("\n[bold green]✓ Pipeline complete![/bold green]")
-        
+        console.print("\n[cyan]Results:[/cyan]")
+
+        for step_name, step_results in results.items():
+            if isinstance(step_results, dict) and not step_results.get("skipped"):
+                console.print(f"  [bold]{step_name}:[/bold]")
+                if "output_file" in step_results:
+                    console.print(f"    Output: {step_results['output_file']}")
+                if "transcript_file" in step_results:
+                    console.print(f"    Transcript: {step_results['transcript_file']}")
+                if "summary_file" in step_results:
+                    console.print(f"    Summary: {step_results['summary_file']}")
+
     except ValidationError as e:
         console.print(f"[red]Validation Error: {e}[/red]")
+        raise typer.Exit(1)
+    except FileNotFoundError as e:
+        console.print(f"[red]File Error: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Pipeline failed: {e}[/red]")
         raise typer.Exit(1)
 
 @app.command("config")
-def cmd_config():
+def cmd_config() -> None:
     """Show current configuration."""
     table = Table(title="Summeets Configuration")
     table.add_column("Setting", style="cyan")
@@ -251,7 +332,17 @@ def cmd_config():
     
     console.print(table)
 
-def main():
+@app.command("tui")
+def cmd_tui() -> None:
+    """Launch the Textual-based TUI for running workflows."""
+    try:
+        from .tui import run as start_tui
+        start_tui()
+    except Exception as e:
+        console.print(f"[red]Failed to launch TUI: {e}[/red]")
+        raise typer.Exit(1)
+
+def main() -> None:
     app()
 
 if __name__ == "__main__":

@@ -8,11 +8,11 @@ import logging
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from core.utils.error_handling import (
+from src.utils.error_handling import (
     handle_file_operation_errors, handle_api_errors, handle_validation_errors,
     log_and_raise_error, safe_file_operation, with_retry, ErrorContext
 )
-from core.utils.exceptions import SummeetsError
+from src.utils.exceptions import SummeetsError
 
 
 class TestFileOperationErrorDecorator:

@@ -2,12 +2,12 @@
 import pytest
 from pathlib import Path
 
-from core.utils.config import SETTINGS
-from core.audio.ffmpeg_ops import probe
-from core.providers.openai_client import client as openai_client
-from core.providers.anthropic_client import client as anthropic_client
-from core.utils.fsio import get_data_manager
-from core.models import TranscriptionJob, SummarizationJob, ProcessingStatus
+from src.utils.config import SETTINGS
+from src.audio.ffmpeg_ops import probe
+from src.providers.openai_client import client as openai_client
+from src.providers.anthropic_client import client as anthropic_client
+from src.utils.fsio import get_data_manager
+from src.models import TranscriptionJob, SummarizationJob, ProcessingStatus
 
 
 def test_settings_loading():
