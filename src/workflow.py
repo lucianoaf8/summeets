@@ -5,12 +5,12 @@ Supports conditional execution based on input file type and user configuration.
 
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 from dataclasses import dataclass
 
-from .models import TranscriptData, SummaryData
+from .models import TranscriptData, SummaryData, InputFileType
 from .utils.validation import validate_workflow_input, detect_file_type
-from .utils.exceptions import SummeetsError, ValidationError
+from .utils.exceptions import SummeetsError
 from .utils.config import SETTINGS
 from .utils.fsio import get_data_manager
 from .audio.ffmpeg_ops import (
@@ -31,7 +31,7 @@ class WorkflowStep:
     """Represents a single workflow step."""
     name: str
     enabled: bool
-    function: callable
+    function: Callable[[Dict[str, Any]], Dict[str, Any]]
     settings: Dict[str, Any]
     required_input_type: Optional[str] = None
     
@@ -166,7 +166,7 @@ class WorkflowEngine:
         
         return steps
     
-    def execute(self, progress_callback: Optional[callable] = None) -> Dict[str, Any]:
+    def execute(self, progress_callback: Optional[Callable[[int, int, str, str], None]] = None) -> Dict[str, Any]:
         """Execute the workflow pipeline."""
         log.info(f"Starting workflow execution for {self.file_type} file: {self.config.input_file}")
         
@@ -411,9 +411,9 @@ class WorkflowEngine:
                 else:
                     # Handle text files
                     content = f.read()
-                    from .models import TranscriptData, TranscriptSegment
+                    from .models import TranscriptData, Segment
                     self.current_transcript = TranscriptData(
-                        segments=[TranscriptSegment(
+                        segments=[Segment(
                             text=content,
                             start=0.0,
                             end=0.0,
@@ -429,7 +429,7 @@ class WorkflowEngine:
             raise SummeetsError(f"Failed to load transcript file: {e}")
 
 
-def execute_workflow(config: WorkflowConfig, progress_callback: Optional[callable] = None) -> Dict[str, Any]:
+def execute_workflow(config: WorkflowConfig, progress_callback: Optional[Callable[[int, int, str, str], None]] = None) -> Dict[str, Any]:
     """
     Execute a workflow with the given configuration.
     

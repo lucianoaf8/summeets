@@ -12,7 +12,8 @@ __all__ = [
     'AudioCompressionError', 'TranscriptionError', 'APIError', 'ReplicateAPIError',
     'LLMProviderError', 'OpenAIError', 'AnthropicError', 'FileOperationError',
     'ConfigurationError', 'create_error_handler', 'sanitize_error_message',
-    'sanitize_path', 'log_and_reraise', 'safe_operation', 'ErrorContext'
+    'sanitize_path', 'log_and_reraise', 'safe_operation', 'ErrorContext',
+    'sanitize_log_message'
 ]
 
 
@@ -213,6 +214,55 @@ def sanitize_error_message(message: str) -> str:
     sanitized = re.sub(r'sk-[a-zA-Z0-9]{20,}', 'sk-***MASKED***', sanitized)
     sanitized = re.sub(r'sk-ant-[a-zA-Z0-9]{20,}', 'sk-ant-***MASKED***', sanitized)
     sanitized = re.sub(r'r8_[a-zA-Z0-9]{20,}', 'r8_***MASKED***', sanitized)
+
+    return sanitized
+
+
+def sanitize_log_message(message: str) -> str:
+    """
+    Sanitize a message for safe logging.
+
+    Prevents log injection attacks by:
+    - Removing/escaping control characters
+    - Removing newlines that could fake log entries
+    - Masking sensitive patterns (API keys, paths)
+
+    Args:
+        message: Message to sanitize
+
+    Returns:
+        Sanitized message safe for logging
+    """
+    import re
+
+    if not message:
+        return ""
+
+    # Remove control characters (except tab and space)
+    sanitized = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', message)
+
+    # Replace newlines with escaped representation to prevent log injection
+    sanitized = sanitized.replace('\n', '\\n').replace('\r', '\\r')
+
+    # Mask API keys and secrets
+    sanitized = re.sub(r'sk-[a-zA-Z0-9]{20,}', 'sk-***MASKED***', sanitized)
+    sanitized = re.sub(r'sk-ant-[a-zA-Z0-9]{20,}', 'sk-ant-***MASKED***', sanitized)
+    sanitized = re.sub(r'sk-proj-[a-zA-Z0-9]{20,}', 'sk-proj-***MASKED***', sanitized)
+    sanitized = re.sub(r'r8_[a-zA-Z0-9]{20,}', 'r8_***MASKED***', sanitized)
+
+    # Mask AWS keys
+    sanitized = re.sub(r'AKIA[0-9A-Z]{16}', 'AKIA***MASKED***', sanitized)
+
+    # Mask passwords in URLs (e.g., postgres://user:password@host)
+    sanitized = re.sub(r'://([^:]+):([^@]+)@', r'://\1:***MASKED***@', sanitized)
+
+    # Mask JWT tokens
+    sanitized = re.sub(r'eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*', '***JWT_MASKED***', sanitized)
+
+    # Limit message length to prevent log flooding
+    max_length = 10000
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + '...[TRUNCATED]'
 
     return sanitized
 

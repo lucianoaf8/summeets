@@ -44,6 +44,14 @@ class FileType(str, Enum):
     CSV = "csv"
 
 
+class InputFileType(str, Enum):
+    """Input file types for workflow processing."""
+    VIDEO = "video"
+    AUDIO = "audio"
+    TRANSCRIPT = "transcript"
+    UNKNOWN = "unknown"
+
+
 class SummaryTemplate(str, Enum):
     """Summary template types."""
     DEFAULT = "default"
@@ -278,5 +286,3 @@ class SummaryData:
     chunk_summaries: Optional[List[str]] = None
 
 
-# Legacy compatibility
-TranscriptSegment = Segment  # For backward compatibility

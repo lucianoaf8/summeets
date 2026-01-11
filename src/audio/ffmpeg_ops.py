@@ -315,11 +315,11 @@ def extract_audio_from_video(
     # Configure audio codec and quality based on format
     if format == "m4a":
         if quality == "high":
-            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_high_bitrate])
         elif quality == "medium":
-            cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_medium_bitrate])
         else:  # low
-            cmd.extend(["-c:a", "aac", "-b:a", "96k"])
+            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_low_bitrate])
 
     elif format == "mp3":
         if quality == "high":
@@ -412,11 +412,11 @@ def convert_audio_format(
 
     if format == "m4a":
         if quality == "high":
-            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_high_bitrate])
         elif quality == "medium":
-            cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_medium_bitrate])
         else:
-            cmd.extend(["-c:a", "aac", "-b:a", "96k"])
+            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_low_bitrate])
 
     elif format == "mp3":
         if quality == "high":

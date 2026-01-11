@@ -65,7 +65,7 @@ class TestCLIAudioCommands:
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
-    @patch('core.audio.ffmpeg_ops.probe')
+    @patch('src.audio.ffmpeg_ops.probe')
     def test_cli_probe_command(self, mock_probe):
         """Test CLI probe command."""
         # Create test audio file
@@ -81,7 +81,7 @@ class TestCLIAudioCommands:
         assert "Audio" in result.stdout
         mock_probe.assert_called_once_with(str(audio_file))
     
-    @patch('core.audio.ffmpeg_ops.normalize_loudness')
+    @patch('src.audio.ffmpeg_ops.normalize_loudness')
     def test_cli_normalize_command(self, mock_normalize):
         """Test CLI normalize command."""
         input_file = self.temp_dir / "input.mp3"
@@ -97,7 +97,7 @@ class TestCLIAudioCommands:
         assert result.exit_code == 0
         mock_normalize.assert_called_once()
     
-    @patch('core.audio.ffmpeg_ops.extract_audio_from_video')
+    @patch('src.audio.ffmpeg_ops.extract_audio_from_video')
     def test_cli_extract_command(self, mock_extract):
         """Test CLI extract command."""
         video_file = self.temp_dir / "video.mp4"
@@ -147,7 +147,7 @@ class TestCLITranscriptionCommands:
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
-    @patch('core.transcribe.pipeline.transcribe_run')
+    @patch('src.transcribe.pipeline.transcribe_run')
     def test_cli_transcribe_command(self, mock_transcribe):
         """Test CLI transcribe command."""
         audio_file = self.temp_dir / "meeting.mp3"
@@ -172,7 +172,7 @@ class TestCLITranscriptionCommands:
         assert call_args[1]['transcript_path'] == audio_file
         assert call_args[1]['output_dir'] == output_dir
     
-    @patch('core.transcribe.pipeline.transcribe_run')
+    @patch('src.transcribe.pipeline.transcribe_run')
     def test_cli_transcribe_with_options(self, mock_transcribe):
         """Test CLI transcribe with custom options."""
         audio_file = self.temp_dir / "meeting.wav"
@@ -226,7 +226,7 @@ class TestCLISummarizationCommands:
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
-    @patch('core.summarize.pipeline.summarize_run')
+    @patch('src.summarize.pipeline.summarize_run')
     def test_cli_summarize_command(self, mock_summarize):
         """Test CLI summarize command with OpenAI."""
         # Create test transcript file
@@ -265,7 +265,7 @@ class TestCLISummarizationCommands:
         assert call_args[1]['provider'] == "openai"
         assert call_args[1]['model'] == "gpt-4o-mini"
     
-    @patch('core.summarize.pipeline.summarize_run')
+    @patch('src.summarize.pipeline.summarize_run')
     def test_cli_summarize_anthropic(self, mock_summarize):
         """Test CLI summarize command with Anthropic."""
         transcript_file = self.temp_dir / "transcript.json"
@@ -335,7 +335,7 @@ class TestCLIWorkflowCommands:
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
-    @patch('core.workflow.execute_workflow')
+    @patch('src.workflow.execute_workflow')
     def test_cli_process_command_audio(self, mock_execute):
         """Test CLI process command with audio file."""
         audio_file = self.temp_dir / "meeting.mp3"
@@ -368,7 +368,7 @@ class TestCLIWorkflowCommands:
         assert call_args.output_dir == output_dir
         assert call_args.provider == "openai"
     
-    @patch('core.workflow.execute_workflow')
+    @patch('src.workflow.execute_workflow')
     def test_cli_process_command_video(self, mock_execute):
         """Test CLI process command with video file."""
         video_file = self.temp_dir / "meeting.mp4"
@@ -406,7 +406,7 @@ class TestCLIWorkflowCommands:
         assert call_args.increase_volume is True
         assert call_args.template == "sop"
     
-    @patch('core.workflow.execute_workflow')
+    @patch('src.workflow.execute_workflow')
     def test_cli_process_command_transcript_only(self, mock_execute):
         """Test CLI process command with transcript file."""
         transcript_file = self.temp_dir / "transcript.json"
@@ -446,7 +446,7 @@ class TestCLIWorkflowCommands:
                 progress_callback(3, 3, "complete", "Workflow completed")
             return {"transcribe": self.temp_dir / "transcript.json"}
         
-        with patch('core.workflow.execute_workflow', side_effect=mock_execute_with_progress):
+        with patch('src.workflow.execute_workflow', side_effect=mock_execute_with_progress):
             with patch.dict('os.environ', {
                 'REPLICATE_API_TOKEN': 'test-token',
                 'OPENAI_API_KEY': 'test-key'
@@ -529,7 +529,7 @@ class TestCLIErrorHandling:
         
         assert result.exit_code != 0
     
-    @patch('core.workflow.execute_workflow')
+    @patch('src.workflow.execute_workflow')
     def test_cli_workflow_error(self, mock_execute):
         """Test CLI workflow with execution error."""
         audio_file = self.temp_dir / "meeting.mp3"
@@ -556,7 +556,7 @@ class TestCLIErrorHandling:
         
         audio_file.write_bytes(b"fake audio data")
         
-        with patch('core.workflow.execute_workflow') as mock_execute:
+        with patch('src.workflow.execute_workflow') as mock_execute:
             mock_execute.return_value = {}
             
             with patch.dict('os.environ', {
@@ -599,7 +599,7 @@ class TestCLIIntegrationScenarios:
         output_dir.mkdir()
         
         # Mock the complete workflow
-        with patch('core.workflow.execute_workflow') as mock_execute:
+        with patch('src.workflow.execute_workflow') as mock_execute:
             mock_execute.return_value = {
                 "transcribe": transcript_file,
                 "summarize": summary_file
@@ -644,7 +644,7 @@ class TestCLIIntegrationScenarios:
         output_dir.mkdir()
         
         # Process each file
-        with patch('core.workflow.execute_workflow') as mock_execute:
+        with patch('src.workflow.execute_workflow') as mock_execute:
             mock_execute.return_value = {"transcribe": output_dir / "transcript.json"}
             
             with patch.dict('os.environ', {
@@ -675,7 +675,7 @@ class TestCLIIntegrationScenarios:
         video_file.write_bytes(b"fake video data")
         
         # Step 1: Extract audio
-        with patch('core.audio.ffmpeg_ops.extract_audio_from_video') as mock_extract:
+        with patch('src.audio.ffmpeg_ops.extract_audio_from_video') as mock_extract:
             mock_extract.return_value = audio_file
             
             result = self.runner.invoke(app, [
@@ -690,7 +690,7 @@ class TestCLIIntegrationScenarios:
         # Step 2: Transcribe (simulate audio file exists)
         audio_file.write_bytes(b"fake audio data")
         
-        with patch('core.transcribe.pipeline.transcribe_run') as mock_transcribe:
+        with patch('src.transcribe.pipeline.transcribe_run') as mock_transcribe:
             mock_transcribe.return_value = transcript_file
             
             with patch.dict('os.environ', {'REPLICATE_API_TOKEN': 'test-token'}):
@@ -705,7 +705,7 @@ class TestCLIIntegrationScenarios:
         transcript_data = {"segments": [{"text": "test", "speaker": "SPEAKER_00"}]}
         transcript_file.write_text(json.dumps(transcript_data))
         
-        with patch('core.summarize.pipeline.summarize_run') as mock_summarize:
+        with patch('src.summarize.pipeline.summarize_run') as mock_summarize:
             mock_summarize.return_value = summary_file
             
             with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):

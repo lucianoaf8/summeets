@@ -26,6 +26,20 @@ from textual.widgets import (
     Static,
 )
 
+from .constants import (
+    VIDEO_EXTENSIONS,
+    AUDIO_EXTENSIONS,
+    TRANSCRIPT_EXTENSIONS,
+    ALL_SUPPORTED_EXTENSIONS,
+    STATUS_ICONS,
+    COLOR_VIDEO,
+    COLOR_AUDIO,
+    COLOR_TRANSCRIPT,
+    load_env_file,
+    mask_api_key,
+    MASK_VISIBLE_CHARS,
+)
+
 
 # =============================================================================
 # STAGE INDICATOR WIDGET
@@ -117,13 +131,7 @@ class StageIndicator(Static):
         yield Static("", classes="stage-time", id="time")
 
     def _get_status_display(self) -> str:
-        icons = {
-            "pending": "○  ─ ─",
-            "active": "◉  ▶▶▶",
-            "complete": "●  ✓ ✓",
-            "error": "◉  ✗ ✗",
-        }
-        return icons.get(self.status, "○  ─ ─")
+        return STATUS_ICONS.get(self.status, STATUS_ICONS["pending"])
 
     def watch_status(self, old: str, new: str) -> None:
         self.remove_class(f"stage--{old}")
@@ -225,26 +233,21 @@ class PipelineStatus(Container):
 class FilteredDirectoryTree(DirectoryTree):
     """DirectoryTree filtered to show only supported media formats."""
 
-    VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".wmv", ".flv"}
-    AUDIO_EXT = {".m4a", ".flac", ".wav", ".mp3", ".ogg", ".mka"}
-    TRANSCRIPT_EXT = {".json", ".txt", ".srt", ".md"}
-
     def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
         """Filter to show only supported file types."""
-        supported = self.VIDEO_EXT | self.AUDIO_EXT | self.TRANSCRIPT_EXT
-        return [p for p in paths if p.is_dir() or p.suffix.lower() in supported]
+        return [p for p in paths if p.is_dir() or p.suffix.lower() in ALL_SUPPORTED_EXTENSIONS]
 
     def render_label(self, node, base_style, style) -> Text:
         """Color-code files by type."""
         label = super().render_label(node, base_style, style)
         if node.data and hasattr(node.data, 'path') and node.data.path.is_file():
             ext = node.data.path.suffix.lower()
-            if ext in self.VIDEO_EXT:
-                label.stylize("bold #38bdf8")  # Cyan for video
-            elif ext in self.AUDIO_EXT:
-                label.stylize("bold #22c55e")  # Green for audio
-            elif ext in self.TRANSCRIPT_EXT:
-                label.stylize("bold #fbbf24")  # Yellow for transcript
+            if ext in VIDEO_EXTENSIONS:
+                label.stylize(f"bold {COLOR_VIDEO}")
+            elif ext in AUDIO_EXTENSIONS:
+                label.stylize(f"bold {COLOR_AUDIO}")
+            elif ext in TRANSCRIPT_EXTENSIONS:
+                label.stylize(f"bold {COLOR_TRANSCRIPT}")
         return label
 
 
@@ -253,10 +256,6 @@ class FileExplorer(Container):
     File explorer limited to data/ and docs/ directories only.
     Shows two directory trees side by side or stacked.
     """
-
-    VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".wmv", ".flv"}
-    AUDIO_EXT = {".m4a", ".flac", ".wav", ".mp3", ".ogg", ".mka"}
-    TRANSCRIPT_EXT = {".json", ".txt", ".srt", ".md"}
 
     DEFAULT_CSS = """
     FileExplorer {
@@ -319,11 +318,11 @@ class FileExplorer(Container):
     def get_file_type(cls, path: Path) -> str:
         """Determine file type from extension."""
         ext = path.suffix.lower()
-        if ext in cls.VIDEO_EXT:
+        if ext in VIDEO_EXTENSIONS:
             return "video"
-        elif ext in cls.AUDIO_EXT:
+        elif ext in AUDIO_EXTENSIONS:
             return "audio"
-        elif ext in cls.TRANSCRIPT_EXT:
+        elif ext in TRANSCRIPT_EXTENSIONS:
             return "transcript"
         return "unknown"
 
@@ -492,11 +491,29 @@ class ProgressPanel(Container):
 
 
 # =============================================================================
-# CONFIG PANEL
+# CONFIG PANEL (Unified with Env settings)
 # =============================================================================
 
 class ConfigPanel(Container):
-    """Configuration controls with collapsible advanced options."""
+    """
+    Unified configuration panel with:
+    - LLM provider/model settings
+    - Template checkbox group with auto-detect logic
+    - API keys (masked)
+    - Advanced options
+    - Save functionality
+    """
+
+    TEMPLATE_OPTIONS = [
+        ("auto-detect", "Auto-detect template"),
+        ("default", "Default"),
+        ("sop", "SOP"),
+        ("decision", "Decision Log"),
+        ("brainstorm", "Brainstorm"),
+        ("requirements", "Requirements"),
+    ]
+
+    SENSITIVE_KEYS = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "REPLICATE_API_TOKEN"}
 
     DEFAULT_CSS = """
     ConfigPanel {
@@ -510,9 +527,20 @@ class ConfigPanel(Container):
         margin-bottom: 1;
     }
 
+    ConfigPanel .subsection-title {
+        text-style: bold;
+        color: #fbbf24;
+        margin-top: 1;
+        margin-bottom: 0;
+    }
+
     ConfigPanel Label {
         color: #94a3b8;
         margin-top: 1;
+    }
+
+    ConfigPanel .key-label {
+        color: #fbbf24;
     }
 
     ConfigPanel Select {
@@ -548,66 +576,217 @@ class ConfigPanel(Container):
         color: white;
     }
 
+    ConfigPanel .btn-save {
+        background: #22c55e;
+        color: #0a0e1a;
+        text-style: bold;
+    }
+
+    ConfigPanel .btn-save:hover {
+        background: #16a34a;
+    }
+
     ConfigPanel Collapsible {
         margin-top: 1;
         background: #0f172a;
         border: solid #334155;
         padding: 0 1;
     }
+
+    ConfigPanel .template-group {
+        padding: 0 1;
+        margin-top: 1;
+    }
+
+    ConfigPanel .template-group {
+        height: auto;
+        padding: 0;
+        margin: 0 0 1 0;
+    }
+
+    ConfigPanel .template-group Checkbox {
+        margin: 0;
+        padding: 0;
+        height: auto;
+    }
+
+    ConfigPanel .template-group Checkbox.disabled-template {
+        opacity: 0.4;
+    }
+
+    /* Hide checkbox indicator when unchecked */
+    Checkbox > .toggle--button {
+        color: #64748b;
+    }
+
+    Checkbox.-on > .toggle--button {
+        color: #38bdf8;
+    }
+
+    /* Run/Cancel toggle button */
+    ConfigPanel .btn-run.btn-cancel-mode {
+        background: #ef4444;
+    }
+
+    ConfigPanel .btn-run.btn-cancel-mode:hover {
+        background: #dc2626;
+    }
+
+    ConfigPanel .env-status {
+        color: #64748b;
+        text-style: italic;
+    }
+
+    ConfigPanel .env-status.env-saved {
+        color: #22c55e;
+    }
     """
+
+    def __init__(self, env_path: Optional[Path] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.env_path = env_path or Path(".env")
+        self._env_values: dict[str, str] = load_env_file(self.env_path)
 
     def compose(self) -> ComposeResult:
         yield Static("◆ CONFIGURATION", classes="section-title")
 
+        # LLM Settings
         yield Label("LLM Provider")
+        provider_value = self._env_values.get("LLM_PROVIDER", "openai")
+        if provider_value not in ("openai", "anthropic"):
+            provider_value = "openai"
         yield Select(
             options=[("OpenAI", "openai"), ("Anthropic", "anthropic")],
-            value="openai",
+            value=provider_value,
             id="provider"
         )
 
         yield Label("Model")
-        yield Input(value="gpt-4o-mini", id="model")
-
-        yield Label("Template")
-        yield Select(
-            options=[
-                ("Default", "default"),
-                ("SOP", "sop"),
-                ("Decision Log", "decision"),
-                ("Brainstorm", "brainstorm"),
-                ("Requirements", "requirements"),
-            ],
-            value="default",
-            id="template"
+        yield Input(
+            value=self._env_values.get("LLM_MODEL", "gpt-4o-mini"),
+            id="model"
         )
 
-        yield Checkbox("Auto-detect template", value=True, id="auto-detect")
+        # Template Checkbox Group
+        yield Static("Templates", classes="subsection-title")
+        with Vertical(classes="template-group"):
+            yield Checkbox("Auto-detect template", value=True, id="tpl-auto-detect")
+            yield Checkbox("Default", value=False, id="tpl-default", classes="disabled-template")
+            yield Checkbox("SOP", value=False, id="tpl-sop", classes="disabled-template")
+            yield Checkbox("Decision Log", value=False, id="tpl-decision", classes="disabled-template")
+            yield Checkbox("Brainstorm", value=False, id="tpl-brainstorm", classes="disabled-template")
+            yield Checkbox("Requirements", value=False, id="tpl-requirements", classes="disabled-template")
 
+        # API Keys (collapsed)
+        with Collapsible(title="API Keys", collapsed=True):
+            yield Label("OpenAI API Key", classes="key-label")
+            yield MaskedInput(
+                value=self._env_values.get("OPENAI_API_KEY", ""),
+                placeholder="sk-...",
+                id="env-openai-key"
+            )
+
+            yield Label("Anthropic API Key", classes="key-label")
+            yield MaskedInput(
+                value=self._env_values.get("ANTHROPIC_API_KEY", ""),
+                placeholder="sk-ant-...",
+                id="env-anthropic-key"
+            )
+
+            yield Label("Replicate API Token", classes="key-label")
+            yield MaskedInput(
+                value=self._env_values.get("REPLICATE_API_TOKEN", ""),
+                placeholder="r8_...",
+                id="env-replicate-token"
+            )
+
+        # Advanced Options
         with Collapsible(title="Advanced Options", collapsed=True):
             yield Label("Chunk Size (seconds)")
-            yield Input(value="1800", id="chunk-size")
+            yield Input(
+                value=self._env_values.get("SUMMARY_CHUNK_SECONDS", "1800"),
+                id="chunk-size"
+            )
 
             yield Label("CoD Passes")
-            yield Input(value="2", id="cod-passes")
+            yield Input(
+                value=self._env_values.get("SUMMARY_COD_PASSES", "2"),
+                id="cod-passes"
+            )
 
             yield Label("Max Output Tokens")
-            yield Input(value="3000", id="max-tokens")
+            yield Input(
+                value=self._env_values.get("SUMMARY_MAX_OUTPUT_TOKENS", "3000"),
+                id="max-tokens"
+            )
 
             yield Checkbox("Normalize audio", value=True, id="normalize")
             yield Checkbox("Increase volume", value=False, id="increase-volume")
 
+        yield Static("", classes="env-status", id="env-status")
+        yield Button("💾  Save Config", id="btn-save-env", classes="btn-save")
         yield Button("▶  Run Workflow", id="btn-run", classes="btn-run")
-        yield Button("■  Cancel", id="btn-cancel", classes="btn-cancel", disabled=True)
+
+    def on_mount(self) -> None:
+        """Initialize template checkbox states."""
+        self._update_template_states()
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        """Handle template checkbox changes."""
+        if event.checkbox.id == "tpl-auto-detect":
+            self._update_template_states()
+
+    def _update_template_states(self) -> None:
+        """Update template checkbox enabled/disabled states."""
+        try:
+            auto_detect = self.query_one("#tpl-auto-detect", Checkbox)
+            is_auto = auto_detect.value
+
+            template_ids = ["tpl-default", "tpl-sop", "tpl-decision", "tpl-brainstorm", "tpl-requirements"]
+
+            for tpl_id in template_ids:
+                try:
+                    cb = self.query_one(f"#{tpl_id}", Checkbox)
+                    cb.disabled = is_auto
+                    if is_auto:
+                        cb.value = False
+                        cb.add_class("disabled-template")
+                    else:
+                        cb.remove_class("disabled-template")
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def get_config(self) -> dict:
         """Extract current configuration values."""
         try:
+            # Get selected templates
+            auto_detect = self.query_one("#tpl-auto-detect", Checkbox).value
+            selected_templates = []
+
+            if not auto_detect:
+                template_map = {
+                    "tpl-default": "default",
+                    "tpl-sop": "sop",
+                    "tpl-decision": "decision",
+                    "tpl-brainstorm": "brainstorm",
+                    "tpl-requirements": "requirements",
+                }
+                for tpl_id, tpl_name in template_map.items():
+                    try:
+                        if self.query_one(f"#{tpl_id}", Checkbox).value:
+                            selected_templates.append(tpl_name)
+                    except Exception:
+                        pass
+
+            templates = selected_templates if selected_templates else ["default"]
             return {
                 "provider": self.query_one("#provider", Select).value or "openai",
                 "model": self.query_one("#model", Input).value or "gpt-4o-mini",
-                "template": self.query_one("#template", Select).value or "default",
-                "auto_detect": self.query_one("#auto-detect", Checkbox).value,
+                "templates": templates,
+                "template": templates[0] if templates else "default",  # Backward compat
+                "auto_detect": auto_detect,
                 "chunk_seconds": int(self.query_one("#chunk-size", Input).value or 1800),
                 "cod_passes": int(self.query_one("#cod-passes", Input).value or 2),
                 "max_tokens": int(self.query_one("#max-tokens", Input).value or 3000),
@@ -618,6 +797,7 @@ class ConfigPanel(Container):
             return {
                 "provider": "openai",
                 "model": "gpt-4o-mini",
+                "templates": ["default"],
                 "template": "default",
                 "auto_detect": True,
                 "chunk_seconds": 1800,
@@ -627,11 +807,74 @@ class ConfigPanel(Container):
                 "increase_volume": False,
             }
 
-    def set_processing(self, is_processing: bool) -> None:
-        """Toggle button states during processing."""
+    def save_env(self) -> tuple[bool, str]:
+        """Save current values to .env file."""
         try:
-            self.query_one("#btn-run", Button).disabled = is_processing
-            self.query_one("#btn-cancel", Button).disabled = not is_processing
+            # Get values from form
+            provider = self.query_one("#provider", Select).value or "openai"
+            model = self.query_one("#model", Input).value or "gpt-4o-mini"
+            max_tokens = self.query_one("#max-tokens", Input).value or "3000"
+            chunk_seconds = self.query_one("#chunk-size", Input).value or "1800"
+            cod_passes = self.query_one("#cod-passes", Input).value or "2"
+
+            openai_key = self.query_one("#env-openai-key", MaskedInput).get_real_value()
+            anthropic_key = self.query_one("#env-anthropic-key", MaskedInput).get_real_value()
+            replicate_token = self.query_one("#env-replicate-token", MaskedInput).get_real_value()
+
+            # Build .env content
+            lines = [
+                "# Summeets Configuration",
+                "# Generated by Summeets TUI",
+                "",
+                "# LLM Provider",
+                f"LLM_PROVIDER={provider}",
+                f"LLM_MODEL={model}",
+                "",
+                "# API Keys",
+            ]
+
+            if openai_key:
+                lines.append(f"OPENAI_API_KEY={openai_key}")
+            if anthropic_key:
+                lines.append(f"ANTHROPIC_API_KEY={anthropic_key}")
+            if replicate_token:
+                lines.append(f"REPLICATE_API_TOKEN={replicate_token}")
+
+            lines.extend([
+                "",
+                "# Summarization Settings",
+                f"SUMMARY_MAX_OUTPUT_TOKENS={max_tokens}",
+                f"SUMMARY_CHUNK_SECONDS={chunk_seconds}",
+                f"SUMMARY_COD_PASSES={cod_passes}",
+                "",
+            ])
+
+            with open(self.env_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+
+            # Update status
+            try:
+                status = self.query_one("#env-status", Static)
+                status.update("✓ Config saved!")
+                status.add_class("env-saved")
+            except Exception:
+                pass
+
+            return True, "Configuration saved successfully"
+
+        except Exception as e:
+            return False, f"Failed to save: {e}"
+
+    def set_processing(self, is_processing: bool) -> None:
+        """Toggle Run button between Run/Cancel modes."""
+        try:
+            btn = self.query_one("#btn-run", Button)
+            if is_processing:
+                btn.label = "■  Cancel"
+                btn.add_class("btn-cancel-mode")
+            else:
+                btn.label = "▶  Run Workflow"
+                btn.remove_class("btn-cancel-mode")
         except Exception:
             pass
 
@@ -658,16 +901,10 @@ class MaskedInput(Input):
 
     def __init__(self, value: str = "", placeholder: str = "", **kwargs) -> None:
         self._real_value = value
-        masked = self._mask_value(value) if value else ""
+        masked = mask_api_key(value) if value else ""
         super().__init__(value=masked, placeholder=placeholder, **kwargs)
         if value:
             self.add_class("masked")
-
-    def _mask_value(self, value: str) -> str:
-        """Mask a value showing only first 4 and last 4 chars."""
-        if len(value) <= 12:
-            return "*" * len(value)
-        return value[:4] + "*" * (len(value) - 8) + value[-4:]
 
     def on_focus(self) -> None:
         """Show real value when focused."""
@@ -680,7 +917,7 @@ class MaskedInput(Input):
         """Mask value when unfocused."""
         if not self.is_masked:
             self._real_value = self.value
-            self.value = self._mask_value(self._real_value) if self._real_value else ""
+            self.value = mask_api_key(self._real_value) if self._real_value else ""
             self.is_masked = True
             if self._real_value:
                 self.add_class("masked")
@@ -695,7 +932,7 @@ class MaskedInput(Input):
         """Set the real value (will be masked if not focused)."""
         self._real_value = value
         if self.is_masked:
-            self.value = self._mask_value(value) if value else ""
+            self.value = mask_api_key(value) if value else ""
             if value:
                 self.add_class("masked")
             else:
@@ -790,7 +1027,7 @@ class EnvConfigPanel(Container):
             yield Static("⚠ .env file not found", classes="env-status env-missing", id="env-status")
 
         # Load existing values
-        self._load_env()
+        self._env_values = load_env_file(self.env_path)
 
         with Collapsible(title="API Keys", collapsed=False):
             yield Label("OpenAI API Key", classes="key-label")
@@ -847,22 +1084,6 @@ class EnvConfigPanel(Container):
             )
 
         yield Button("💾  Save .env", id="btn-save-env", classes="btn-save")
-
-    def _load_env(self) -> None:
-        """Load values from .env file."""
-        self._env_values = {}
-        if self.env_path.exists():
-            try:
-                with open(self.env_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith("#") and "=" in line:
-                            key, _, value = line.partition("=")
-                            key = key.strip()
-                            value = value.strip().strip('"').strip("'")
-                            self._env_values[key] = value
-            except Exception:
-                pass
 
     def get_env_values(self) -> dict[str, str]:
         """Get current env values from form."""

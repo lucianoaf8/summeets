@@ -60,10 +60,17 @@ class Settings(BaseSettings):
     summary_template: str = Field("default", alias="SUMMARY_TEMPLATE")
     summary_auto_detect: bool = Field(True, alias="SUMMARY_AUTO_DETECT_TEMPLATE")
 
+    # Extended Thinking Settings
+    thinking_budget_default: int = Field(4000, alias="THINKING_BUDGET_DEFAULT")
+    thinking_budget_extended: int = Field(6000, alias="THINKING_BUDGET_EXTENDED")
+
     # Audio Processing
     ffmpeg_bin: str = "ffmpeg"
     ffprobe_bin: str = "ffprobe"
     max_upload_mb: float = Field(24.0, alias="MAX_UPLOAD_MB")
+    audio_quality_high_bitrate: str = Field("192k", alias="AUDIO_HIGH_BITRATE")
+    audio_quality_medium_bitrate: str = Field("128k", alias="AUDIO_MEDIUM_BITRATE")
+    audio_quality_low_bitrate: str = Field("64k", alias="AUDIO_LOW_BITRATE")
 
     # Data Organization - New Structure
     data_dir: Path = Path("data")
@@ -76,7 +83,12 @@ class Settings(BaseSettings):
     # Legacy support (for backward compatibility)
     input_dir: Path = Field(default_factory=lambda: Path("data/input"))
     output_dir: Path = Field(default_factory=lambda: Path("data/output"))
+    # DEPRECATED: Use output_dir instead. out_dir is kept for backward compatibility only.
     out_dir: Path = Field(default_factory=lambda: Path("data/output"))
+
+    # Environment Settings
+    environment: str = Field("development", alias="ENVIRONMENT")
+    log_level: str = Field("INFO", alias="LOG_LEVEL")
 
     # Job Management
     max_concurrent_jobs: int = Field(3, alias="MAX_CONCURRENT_JOBS")
@@ -206,7 +218,7 @@ def get_configuration_summary() -> dict:
     return {
         'provider': SETTINGS.provider,
         'model': SETTINGS.model,
-        'output_directory': str(SETTINGS.out_dir),
+        'output_directory': str(SETTINGS.output_dir),
         'data_directory': str(SETTINGS.data_dir),
         'temp_directory': str(SETTINGS.temp_dir),
         'ffmpeg_binary': SETTINGS.ffmpeg_bin,
@@ -214,6 +226,7 @@ def get_configuration_summary() -> dict:
         'summary_max_tokens': SETTINGS.summary_max_tokens,
         'summary_chunk_seconds': SETTINGS.summary_chunk_seconds,
         'summary_cod_passes': SETTINGS.summary_cod_passes,
+        'transcription_model': 'thomasmol/whisper-diarization',  # Default transcription model
         'openai_api_key': mask_api_key(SETTINGS.openai_api_key),
         'anthropic_api_key': mask_api_key(SETTINGS.anthropic_api_key),
         'replicate_api_token': mask_api_key(SETTINGS.replicate_api_token)

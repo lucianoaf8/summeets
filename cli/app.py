@@ -12,7 +12,10 @@ from src.summarize.pipeline import run as summarize_transcript
 from src.summarize.templates import SummaryTemplates
 from src.models import SummaryTemplate
 from src.utils.fsio import get_data_manager
-from src.utils.validation import sanitize_path_input, validate_transcript_file, validate_output_dir, validate_model_name, detect_file_type
+from src.utils.validation import (
+    sanitize_path_input, validate_transcript_file, validate_output_dir,
+    validate_model_name, detect_file_type, validate_llm_provider, validate_summary_template
+)
 from src.utils.exceptions import ValidationError
 from src.workflow import WorkflowConfig, execute_workflow
 
@@ -135,16 +138,10 @@ def cmd_summarize(
         transcript = Path(transcript_str)
         validate_transcript_file(transcript)
         
-        # Validate provider options
-        if provider not in ["openai", "anthropic"]:
-            raise ValidationError(f"Invalid provider '{provider}'. Must be 'openai' or 'anthropic'")
-        
-        # Validate model name
+        # Validate provider, model, and template using centralized validators
+        provider = validate_llm_provider(provider)
         model = validate_model_name(model)
-        
-        # Validate template
-        if template not in ["default", "sop", "decision", "brainstorm", "requirements"]:
-            raise ValidationError(f"Invalid template '{template}'. Must be one of: default, sop, decision, brainstorm, requirements")
+        template = validate_summary_template(template)
         template_enum = SummaryTemplate(template)
         
         # Validate numeric parameters
@@ -239,16 +236,10 @@ def cmd_process(
         output_dir = Path(output_str)
         validate_output_dir(output_dir)
 
-        # Validate provider options
-        if provider not in ["openai", "anthropic"]:
-            raise ValidationError(f"Invalid provider '{provider}'. Must be 'openai' or 'anthropic'")
-
-        # Validate model name
+        # Validate provider, model, and template using centralized validators
+        provider = validate_llm_provider(provider)
         model = validate_model_name(model)
-
-        # Validate template
-        if template not in ["default", "sop", "decision", "brainstorm", "requirements"]:
-            raise ValidationError(f"Invalid template '{template}'. Must be one of: default, sop, decision, brainstorm, requirements")
+        template = validate_summary_template(template)
 
         # Detect file type
         file_type = detect_file_type(input_file)

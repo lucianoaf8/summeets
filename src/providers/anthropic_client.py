@@ -22,12 +22,25 @@ _last_api_key: Optional[str] = None
 
 
 def _validate_api_key(api_key: str) -> bool:
-    """Validate Anthropic API key format."""
+    """
+    Validate Anthropic API key format.
+
+    Validates:
+    - Non-empty
+    - Starts with 'sk-ant-' prefix
+    - Minimum length of 30 characters
+    - Contains only valid characters (alphanumeric, hyphens, underscores)
+    """
+    import re
+
     if not api_key:
         return False
     if not api_key.startswith('sk-ant-'):
         return False
     if len(api_key) < 30:  # Minimum reasonable length
+        return False
+    # Validate character set (alphanumeric, hyphens, underscores)
+    if not re.match(r'^[a-zA-Z0-9_-]+$', api_key):
         return False
     return True
 
@@ -95,7 +108,7 @@ def summarize_text(
     system_prompt: str = None,
     max_tokens: int = None,
     enable_thinking: bool = False,
-    thinking_budget: int = 4000
+    thinking_budget: int = None
 ) -> str:
     """General text summarization with Anthropic."""
     system = system_prompt or "You are a helpful assistant that summarizes meetings."
@@ -112,9 +125,10 @@ def summarize_text(
 
     # Add thinking parameters if enabled
     if enable_thinking:
+        budget = thinking_budget or SETTINGS.thinking_budget_default
         message_params["thinking"] = {
             "type": "enabled",
-            "budget_tokens": thinking_budget
+            "budget_tokens": budget
         }
 
     try:
@@ -161,7 +175,7 @@ class AnthropicProvider(LLMProvider):
     ) -> str:
         # Extract Anthropic-specific options
         enable_thinking = kwargs.get('enable_thinking', False)
-        thinking_budget = kwargs.get('thinking_budget', 4000)
+        thinking_budget = kwargs.get('thinking_budget', SETTINGS.thinking_budget_default)
         return summarize_text(
             text,
             system_prompt,

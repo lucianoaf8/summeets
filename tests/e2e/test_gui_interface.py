@@ -184,7 +184,7 @@ class TestGUIProcessingWorkflow:
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
-    @patch('core.workflow.execute_workflow')
+    @patch('src.workflow.execute_workflow')
     def test_gui_start_processing(self, mock_execute):
         """Test starting processing workflow from GUI."""
         # Mock successful workflow execution
@@ -233,7 +233,7 @@ class TestGUIProcessingWorkflow:
             })
         
         # Simulate workflow with progress updates
-        with patch('core.workflow.execute_workflow') as mock_execute:
+        with patch('src.workflow.execute_workflow') as mock_execute:
             def mock_workflow_with_progress(config, progress_callback=None):
                 if progress_callback:
                     progress_callback(1, 3, "transcribe", "Starting transcription...")
@@ -275,7 +275,7 @@ class TestGUIProcessingWorkflow:
             
             return {"result": "completed"}
         
-        with patch('core.workflow.execute_workflow', side_effect=mock_workflow_with_cancellation):
+        with patch('src.workflow.execute_workflow', side_effect=mock_workflow_with_cancellation):
             # Start processing in background
             def start_processing():
                 from src.workflow import WorkflowConfig

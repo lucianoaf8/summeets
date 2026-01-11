@@ -9,7 +9,7 @@ import json
 
 from src.summarize.pipeline import (
     run as summarize_run, load_transcript, chunk_transcript,
-    map_reduce_summarize, chain_of_density_pass
+    legacy_map_reduce_summarize, chain_of_density_pass
 )
 from src.summarize.templates import SummaryTemplates, detect_meeting_type, format_sop_output
 from src.models import SummaryTemplate
@@ -19,8 +19,8 @@ from src.utils.exceptions import SummeetsError, LLMProviderError
 class TestSummarizationPipelineIntegration:
     """Integration tests for summarization pipeline."""
     
-    @patch('core.providers.openai_client.create_openai_summary')
-    def test_complete_summarization_pipeline_openai(self, mock_openai_summary, 
+    @patch('src.providers.openai_client.summarize_text')
+    def test_complete_summarization_pipeline_openai(self, mock_openai_summary,
                                                    transcript_files, tmp_path):
         """Test complete summarization pipeline with OpenAI."""
         transcript_file = transcript_files['json']
@@ -102,7 +102,7 @@ This meeting covered Q3 performance metrics, with particular focus on customer a
         assert "Executive Summary" in summary_data["summary"]
         assert len(summary_data["chunk_summaries"]) == 2
     
-    @patch('core.providers.anthropic_client.create_anthropic_summary')
+    @patch('src.providers.anthropic_client.summarize_text')
     def test_complete_summarization_pipeline_anthropic(self, mock_anthropic_summary,
                                                       transcript_files, tmp_path):
         """Test complete summarization pipeline with Anthropic."""
@@ -195,8 +195,8 @@ Three speakers participated: the meeting facilitator who presented metrics, and 
             for line in lines:
                 assert '[SPEAKER_' in line and ']:' in line
     
-    @patch('core.providers.openai_client.create_openai_summary')
-    def test_template_detection_and_application(self, mock_openai_summary, 
+    @patch('src.providers.openai_client.summarize_text')
+    def test_template_detection_and_application(self, mock_openai_summary,
                                               sop_transcript_segments, tmp_path):
         """Test automatic template detection and application."""
         # Create SOP transcript file
@@ -260,8 +260,8 @@ All staff must demonstrate understanding of each step before processing live app
         assert "Standard Operating Procedure" in summary_data["summary"]
         assert "Step-by-Step" in summary_data["summary"]
     
-    @patch('core.providers.openai_client.create_openai_summary')
-    def test_chain_of_density_processing(self, mock_openai_summary, 
+    @patch('src.providers.openai_client.summarize_text')
+    def test_chain_of_density_processing(self, mock_openai_summary,
                                        transcript_files, tmp_path):
         """Test Chain-of-Density refinement process."""
         transcript_file = transcript_files['json']
@@ -322,8 +322,8 @@ Team actively engaged with targeted questions about customer acquisition numbers
         assert "Executive Summary" in final_summary
         assert "Key Performance Indicators" in final_summary
     
-    @patch('core.providers.openai_client.create_openai_summary')
-    def test_error_handling_and_recovery(self, mock_openai_summary, 
+    @patch('src.providers.openai_client.summarize_text')
+    def test_error_handling_and_recovery(self, mock_openai_summary,
                                        transcript_files, tmp_path):
         """Test error handling in summarization pipeline."""
         transcript_file = transcript_files['json']
@@ -381,7 +381,7 @@ Team actively engaged with targeted questions about customer acquisition numbers
         output_dir.mkdir()
         
         # Mock provider responses for multiple chunks
-        with patch('core.providers.openai_client.create_openai_summary') as mock_summary:
+        with patch('src.providers.openai_client.summarize_text') as mock_summary:
             # Mock responses for each chunk plus final summary
             chunk_responses = [
                 {
@@ -431,7 +431,7 @@ Team actively engaged with targeted questions about customer acquisition numbers
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         
-        with patch('core.providers.openai_client.create_openai_summary') as mock_summary:
+        with patch('src.providers.openai_client.summarize_text') as mock_summary:
             mock_summary.return_value = {
                 "summary": "Multilingual meeting summary covering English, French, and Spanish content.",
                 "usage": {"total_tokens": 150},
@@ -520,7 +520,7 @@ class TestSummarizationEdgeCases:
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         
-        with patch('core.providers.openai_client.create_openai_summary') as mock_summary:
+        with patch('src.providers.openai_client.summarize_text') as mock_summary:
             mock_summary.return_value = {
                 "summary": "No content available for summarization.",
                 "usage": {"total_tokens": 10},

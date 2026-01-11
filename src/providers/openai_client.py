@@ -23,12 +23,25 @@ _last_api_key: Optional[str] = None
 
 
 def _validate_api_key(api_key: str) -> bool:
-    """Validate OpenAI API key format."""
+    """
+    Validate OpenAI API key format.
+
+    Validates:
+    - Non-empty
+    - Starts with 'sk-' or 'sk-proj-' prefix
+    - Minimum length of 20 characters
+    - Contains only valid characters (alphanumeric, hyphens, underscores)
+    """
+    import re
+
     if not api_key:
         return False
-    if not api_key.startswith('sk-'):
+    if not (api_key.startswith('sk-') or api_key.startswith('sk-proj-')):
         return False
     if len(api_key) < 20:  # Minimum reasonable length
+        return False
+    # Validate character set (alphanumeric, hyphens, underscores)
+    if not re.match(r'^[a-zA-Z0-9_-]+$', api_key):
         return False
     return True
 

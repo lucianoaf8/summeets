@@ -41,7 +41,12 @@ __all__ = ['ValidationError', 'validate_safe_path', 'sanitize_path_input', 'vali
            'validate_output_directory', 'validate_filename', 'validate_provider_name',
            'validate_positive_number', 'validate_integer_range', 'validate_transcript_file',
            'validate_output_dir', 'validate_model_name', 'validate_video_path',
-           'validate_transcript_path', 'detect_file_type', 'validate_workflow_input']
+           'validate_transcript_path', 'detect_file_type', 'validate_workflow_input',
+           'validate_llm_provider', 'validate_summary_template', 'VALID_PROVIDERS', 'VALID_TEMPLATES']
+
+# Valid providers and templates (single source of truth)
+VALID_PROVIDERS = frozenset({'openai', 'anthropic'})
+VALID_TEMPLATES = frozenset({'default', 'sop', 'decision', 'brainstorm', 'requirements'})
 
 
 def validate_safe_path(path: Union[str, Path], allowed_directories: Optional[List[Path]] = None) -> Path:
@@ -508,18 +513,22 @@ def validate_transcript_path(path: Union[str, Path]) -> Path:
 def detect_file_type(path: Union[str, Path]) -> str:
     """
     Detect the type of file based on its extension.
-    
+
     Args:
         path: Path to analyze
-        
+
     Returns:
-        File type: 'video', 'audio', 'transcript', or 'unknown'
+        File type string: 'video', 'audio', 'transcript', or 'unknown'
+
+    Note:
+        Returns string for backward compatibility. Use InputFileType enum
+        in new code for type safety.
     """
     if isinstance(path, str):
         path = Path(path)
-    
+
     extension = path.suffix.lower()
-    
+
     if extension in SUPPORTED_VIDEO_EXTENSIONS:
         return 'video'
     elif extension in SUPPORTED_AUDIO_EXTENSIONS:
@@ -528,6 +537,74 @@ def detect_file_type(path: Union[str, Path]) -> str:
         return 'transcript'
     else:
         return 'unknown'
+
+
+def detect_file_type_enum(path: Union[str, Path]):
+    """
+    Detect the type of file and return as InputFileType enum.
+
+    Args:
+        path: Path to analyze
+
+    Returns:
+        InputFileType enum value
+    """
+    from ..models import InputFileType
+
+    file_type_str = detect_file_type(path)
+    return InputFileType(file_type_str)
+
+
+def validate_llm_provider(provider: str) -> str:
+    """
+    Validate LLM provider name against known providers.
+
+    Args:
+        provider: Provider name to validate
+
+    Returns:
+        Validated provider name (lowercase)
+
+    Raises:
+        ValidationError: If provider is not recognized
+    """
+    if not provider or not provider.strip():
+        raise ValidationError("Provider cannot be empty")
+
+    provider = provider.strip().lower()
+
+    if provider not in VALID_PROVIDERS:
+        raise ValidationError(
+            f"Invalid provider '{provider}'. Must be one of: {', '.join(sorted(VALID_PROVIDERS))}"
+        )
+
+    return provider
+
+
+def validate_summary_template(template: str) -> str:
+    """
+    Validate summary template name.
+
+    Args:
+        template: Template name to validate
+
+    Returns:
+        Validated template name (lowercase)
+
+    Raises:
+        ValidationError: If template is not recognized
+    """
+    if not template or not template.strip():
+        raise ValidationError("Template cannot be empty")
+
+    template = template.strip().lower()
+
+    if template not in VALID_TEMPLATES:
+        raise ValidationError(
+            f"Invalid template '{template}'. Must be one of: {', '.join(sorted(VALID_TEMPLATES))}"
+        )
+
+    return template
 
 
 def validate_workflow_input(path: Union[str, Path]) -> tuple[Path, str]:

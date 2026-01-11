@@ -165,7 +165,7 @@ class TestValidationErrorDecorator:
 class TestLogAndRaiseError:
     """Test the log_and_raise_error function."""
     
-    @patch('core.utils.error_handling.log')
+    @patch('src.utils.error_handling.log')
     def test_basic_error_logging(self, mock_log):
         """Test basic error logging and raising."""
         with pytest.raises(SummeetsError, match="Test error message"):
@@ -173,13 +173,13 @@ class TestLogAndRaiseError:
         
         mock_log.log.assert_called_once_with(logging.ERROR, "Test error message")
     
-    @patch('core.utils.error_handling.log')
+    @patch('src.utils.error_handling.log')
     def test_custom_exception_type(self, mock_log):
         """Test with custom exception type."""
         with pytest.raises(ValueError, match="Test error message"):
             log_and_raise_error("Test error message", exception_type=ValueError)
     
-    @patch('core.utils.error_handling.log')
+    @patch('src.utils.error_handling.log')
     def test_custom_log_level(self, mock_log):
         """Test with custom log level."""
         with pytest.raises(SummeetsError):
@@ -187,7 +187,7 @@ class TestLogAndRaiseError:
         
         mock_log.log.assert_called_once_with(logging.WARNING, "Test error message")
     
-    @patch('core.utils.error_handling.log')
+    @patch('src.utils.error_handling.log')
     def test_with_original_exception(self, mock_log):
         """Test with original exception chaining."""
         original_error = ValueError("Original error")
@@ -304,7 +304,7 @@ class TestRetryDecorator:
 class TestErrorContext:
     """Test the ErrorContext context manager."""
     
-    @patch('core.utils.error_handling.log')
+    @patch('src.utils.error_handling.log')
     def test_successful_context(self, mock_log):
         """Test context manager with successful operation."""
         with ErrorContext("test operation"):
@@ -313,7 +313,7 @@ class TestErrorContext:
         assert result == "success"
         mock_log.log.assert_not_called()
     
-    @patch('core.utils.error_handling.log')
+    @patch('src.utils.error_handling.log')
     def test_error_in_context(self, mock_log):
         """Test context manager with error."""
         with pytest.raises(SummeetsError, match="Error during test operation"):
@@ -322,7 +322,7 @@ class TestErrorContext:
         
         mock_log.log.assert_called_once()
     
-    @patch('core.utils.error_handling.log')
+    @patch('src.utils.error_handling.log')
     def test_context_with_variables(self, mock_log):
         """Test context manager with context variables."""
         with pytest.raises(SummeetsError) as exc_info:
@@ -340,16 +340,17 @@ class TestErrorContext:
             with ErrorContext("test operation"):
                 raise original_error
     
-    @patch('core.utils.error_handling.log')
+    @patch('src.utils.error_handling.log')
     def test_custom_log_level(self, mock_log):
         """Test context manager with custom log level."""
         with pytest.raises(SummeetsError):
             with ErrorContext("test operation", log_level=logging.WARNING):
                 raise ValueError("Some error")
         
+        from unittest.mock import ANY
         mock_log.log.assert_called_once_with(
-            logging.WARNING, 
-            pytest.any(str)  # We don't care about the exact message
+            logging.WARNING,
+            ANY  # We don't care about the exact message
         )
 
 

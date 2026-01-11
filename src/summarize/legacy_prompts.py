@@ -119,11 +119,22 @@ STRUCTURED_JSON_SPEC = {
 }
 
 def format_chunk_text(chunk_segments: list) -> str:
-    """Format chunk segments with timestamps like legacy implementation."""
-    return "\n".join(
-        f"[{seg.get('start', 0):.2f}s] {seg.get('speaker', 'Speaker')}: {seg.get('text', '')}"
-        for seg in chunk_segments
-    )
+    """Format chunk segments with timestamps like legacy implementation.
+
+    Applies sanitization to prevent prompt injection attacks.
+    """
+    from ..utils.sanitization import sanitize_prompt_input
+
+    lines = []
+    for seg in chunk_segments:
+        text = seg.get('text', '')
+        # Sanitize each segment's text content
+        sanitized_text = sanitize_prompt_input(text, strict=False)
+        speaker = seg.get('speaker', 'Speaker')
+        start = seg.get('start', 0)
+        lines.append(f"[{start:.2f}s] {speaker}: {sanitized_text}")
+
+    return "\n".join(lines)
 
 def format_partial_summaries(partials: list) -> str:
     """Format partial summaries for reduce phase."""

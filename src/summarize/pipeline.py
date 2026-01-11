@@ -107,7 +107,7 @@ def _preflight_or_raise(*, provider: str, model: str, system_prompt: Optional[st
     """Token preflight with configured budgets; raise if it won't fit."""
     messages = [{"role": "user", "content": user_prompt}]
     budget = TokenBudget(
-        context_window=model_context_window,
+        context_window=SETTINGS.model_context_window,
         max_output_tokens=max_output_tokens,
         safety_margin=SETTINGS.token_safety_margin
     )
@@ -145,7 +145,7 @@ def legacy_map_reduce_summarize(
     )
 
     provider = provider or SETTINGS.provider
-    model = model or model
+    model = model or SETTINGS.model
 
     # Get template-specific prompts
     system_prompt = get_system_prompt(template_type)
@@ -290,14 +290,10 @@ def template_aware_summarize(
                 system_prompt=template_config.system_prompt,
                 max_tokens=template_config.max_tokens,
                 enable_thinking=enable_thinking,
-                thinking_budget=6000 if enable_thinking else 0
+                thinking_budget=SETTINGS.thinking_budget_extended if enable_thinking else 0
             )
         else:
             raise ValueError(f"Unknown provider: {provider}")
-
-        # Validate output for requirements template (disabled - was over-constraining)
-        # if template_config.name == "Requirements Extraction":
-        #     summary = validate_requirements_output(summary, transcript_content)
 
         return summary
     else:
@@ -346,14 +342,14 @@ def template_aware_summarize(
                     template_config.name == "Requirements Extraction v3"
                     and model_supports_thinking
                 )
-                # Note: max_tokens must be > thinking_budget, so use 4000 to accommodate 3000 thinking budget
-                chunk_max_tokens = 4000 if enable_thinking else 800
+                # Note: max_tokens must be > thinking_budget
+                chunk_max_tokens = SETTINGS.thinking_budget_default if enable_thinking else 800
                 summary = anthropic_client.summarize_text(
                     prompt,
                     system_prompt=template_config.system_prompt,
                     max_tokens=chunk_max_tokens,
                     enable_thinking=enable_thinking,
-                    thinking_budget=3000 if enable_thinking else 0
+                    thinking_budget=(SETTINGS.thinking_budget_default - 1000) if enable_thinking else 0
                 )
             else:
                 raise ValueError(f"Unknown provider: {provider}")
@@ -396,22 +392,8 @@ def template_aware_summarize(
                 system_prompt=template_config.system_prompt,
                 max_tokens=template_config.max_tokens,
                 enable_thinking=enable_thinking,
-                thinking_budget=6000 if enable_thinking else 0
+                thinking_budget=SETTINGS.thinking_budget_extended if enable_thinking else 0
             )
-
-        # Validate output for requirements template (disabled - was over-constraining)
-        # if template_config.name == "Requirements Extraction":
-        #     # For multi-chunk, create combined transcript for validation
-        #     all_chunks_text = []
-        #     for chunk in chunk_segments:
-        #         for segment in chunk:
-        #             speaker = segment.get('speaker', 'Unknown')
-        #             text = segment.get('text', '').strip()
-        #             timestamp = segment.get('start', 0)
-        #             if text:
-        #                 all_chunks_text.append(f"[{speaker} at {timestamp:.1f}s]: {text}")
-        #     combined_transcript = '\n'.join(all_chunks_text)
-        #     final_summary = validate_requirements_output(final_summary, combined_transcript)
 
         return final_summary
 
@@ -440,7 +422,7 @@ def run(
     """Run the complete summarization pipeline."""
     # Use config defaults if not provided (immutable - never mutate SETTINGS)
     provider = provider or SETTINGS.provider
-    model = model or model
+    model = model or SETTINGS.model
     chunk_seconds = chunk_seconds or SETTINGS.summary_chunk_seconds
     cod_passes = cod_passes or SETTINGS.summary_cod_passes
     output_dir = output_dir or SETTINGS.out_dir

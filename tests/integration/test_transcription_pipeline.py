@@ -17,10 +17,10 @@ from src.utils.exceptions import TranscriptionError, AudioProcessingError
 class TestTranscriptionPipelineIntegration:
     """Integration tests for transcription pipeline."""
     
-    @patch('core.transcribe.pipeline.ReplicateTranscriber')
-    @patch('core.transcribe.pipeline.ensure_wav16k_mono')
-    @patch('core.transcribe.pipeline.compress_audio_for_upload')
-    @patch('core.transcribe.pipeline.cleanup_temp_file')
+    @patch('src.transcribe.pipeline.ReplicateTranscriber')
+    @patch('src.transcribe.pipeline.ensure_wav16k_mono')
+    @patch('src.transcribe.pipeline.compress_audio_for_upload')
+    @patch('src.transcribe.pipeline.cleanup_temp_file')
     def test_complete_transcription_pipeline(self, mock_cleanup, mock_compress, 
                                            mock_ensure_wav, mock_transcriber_class, 
                                            audio_file_samples, tmp_path):
@@ -91,7 +91,7 @@ class TestTranscriptionPipelineIntegration:
         expected_base_name = input_audio.stem
         expected_json = output_dir / f"{expected_base_name}.json"
         
-        with patch('core.transcribe.formatting.format_transcript_output') as mock_format:
+        with patch('src.transcribe.formatting.format_transcript_output') as mock_format:
             mock_format.return_value = {"json": expected_json}
             
             # Re-run just the save step to verify formatting
@@ -104,7 +104,7 @@ class TestTranscriptionPipelineIntegration:
             pipeline.save_outputs(segments, input_audio, output_dir)
             mock_format.assert_called_once()
     
-    @patch('core.transcribe.pipeline.ReplicateTranscriber')
+    @patch('src.transcribe.pipeline.ReplicateTranscriber')
     def test_transcription_with_progress_tracking(self, mock_transcriber_class, 
                                                 audio_file_samples, tmp_path):
         """Test transcription pipeline with progress tracking."""
@@ -147,9 +147,9 @@ class TestTranscriptionPipelineIntegration:
             progress_calls.append(message)
         
         # Mock other pipeline components
-        with patch('core.transcribe.pipeline.ensure_wav16k_mono') as mock_wav:
-            with patch('core.transcribe.pipeline.compress_audio_for_upload') as mock_compress:
-                with patch('core.transcribe.pipeline.cleanup_temp_file'):
+        with patch('src.transcribe.pipeline.ensure_wav16k_mono') as mock_wav:
+            with patch('src.transcribe.pipeline.compress_audio_for_upload') as mock_compress:
+                with patch('src.transcribe.pipeline.cleanup_temp_file'):
                     mock_wav.return_value = tmp_path / "test.wav"
                     mock_compress.return_value = tmp_path / "test.opus"
                     
@@ -162,7 +162,7 @@ class TestTranscriptionPipelineIntegration:
                     assert any("Whisper" in call for call in progress_calls)
                     assert any("diarization" in call for call in progress_calls)
     
-    @patch('core.transcribe.pipeline.ReplicateTranscriber')
+    @patch('src.transcribe.pipeline.ReplicateTranscriber')
     def test_transcription_error_handling(self, mock_transcriber_class, 
                                         audio_file_samples, tmp_path):
         """Test transcription pipeline error handling."""
@@ -176,9 +176,9 @@ class TestTranscriptionPipelineIntegration:
         mock_transcriber.transcribe.side_effect = Exception("API Error: Rate limit exceeded")
         
         # Mock other pipeline components
-        with patch('core.transcribe.pipeline.ensure_wav16k_mono') as mock_wav:
-            with patch('core.transcribe.pipeline.compress_audio_for_upload') as mock_compress:
-                with patch('core.transcribe.pipeline.cleanup_temp_file') as mock_cleanup:
+        with patch('src.transcribe.pipeline.ensure_wav16k_mono') as mock_wav:
+            with patch('src.transcribe.pipeline.compress_audio_for_upload') as mock_compress:
+                with patch('src.transcribe.pipeline.cleanup_temp_file') as mock_cleanup:
                     mock_wav.return_value = tmp_path / "test.wav"
                     compressed_file = tmp_path / "test.opus"
                     mock_compress.return_value = compressed_file
@@ -192,7 +192,7 @@ class TestTranscriptionPipelineIntegration:
                     # Verify cleanup was called even on error
                     mock_cleanup.assert_called_once_with(compressed_file, input_audio)
     
-    @patch('core.transcribe.replicate_api.replicate')
+    @patch('src.transcribe.replicate_api.replicate')
     def test_replicate_api_integration(self, mock_replicate, audio_file_samples):
         """Test Replicate API integration."""
         # Mock Replicate client
@@ -308,7 +308,7 @@ class TestTranscriptionPipelineIntegration:
         assert "[SPEAKER_00]:" in txt_content
         assert "quarterly review meeting" in txt_content
     
-    @patch('core.transcribe.pipeline.pick_best_audio')
+    @patch('src.transcribe.pipeline.pick_best_audio')
     def test_directory_input_handling(self, mock_pick_audio, directory_with_mixed_files, tmp_path):
         """Test transcription pipeline with directory input."""
         directory = directory_with_mixed_files['directory']
@@ -317,10 +317,10 @@ class TestTranscriptionPipelineIntegration:
         mock_pick_audio.return_value = best_audio
         
         # Mock the rest of the pipeline
-        with patch('core.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
-            with patch('core.transcribe.pipeline.ensure_wav16k_mono') as mock_wav:
-                with patch('core.transcribe.pipeline.compress_audio_for_upload') as mock_compress:
-                    with patch('core.transcribe.pipeline.cleanup_temp_file'):
+        with patch('src.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
+            with patch('src.transcribe.pipeline.ensure_wav16k_mono') as mock_wav:
+                with patch('src.transcribe.pipeline.compress_audio_for_upload') as mock_compress:
+                    with patch('src.transcribe.pipeline.cleanup_temp_file'):
                         # Setup mocks
                         mock_transcriber = Mock()
                         mock_transcriber_class.return_value = mock_transcriber
@@ -344,7 +344,7 @@ class TestTranscriptionPipelineIntegration:
         output_dir = tmp_path / "output"
         
         # Mock the pipeline
-        with patch('core.transcribe.pipeline.TranscriptionPipeline') as mock_pipeline_class:
+        with patch('src.transcribe.pipeline.TranscriptionPipeline') as mock_pipeline_class:
             mock_pipeline = Mock()
             mock_pipeline_class.return_value = mock_pipeline
             
@@ -363,10 +363,10 @@ class TestTranscriptionPipelineIntegration:
         # Simulate large file processing
         large_file_metadata = large_audio_file_mock
         
-        with patch('core.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
-            with patch('core.transcribe.pipeline.ensure_wav16k_mono') as mock_wav:
-                with patch('core.transcribe.pipeline.compress_audio_for_upload') as mock_compress:
-                    with patch('core.transcribe.pipeline.cleanup_temp_file'):
+        with patch('src.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
+            with patch('src.transcribe.pipeline.ensure_wav16k_mono') as mock_wav:
+                with patch('src.transcribe.pipeline.compress_audio_for_upload') as mock_compress:
+                    with patch('src.transcribe.pipeline.cleanup_temp_file'):
                         # Mock file size check
                         with patch('pathlib.Path.stat') as mock_stat:
                             mock_stat.return_value.st_size = large_file_metadata['size']
@@ -404,10 +404,10 @@ class TestTranscriptionEdgeCases:
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         
-        with patch('core.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
-            with patch('core.transcribe.pipeline.ensure_wav16k_mono'):
-                with patch('core.transcribe.pipeline.compress_audio_for_upload'):
-                    with patch('core.transcribe.pipeline.cleanup_temp_file'):
+        with patch('src.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
+            with patch('src.transcribe.pipeline.ensure_wav16k_mono'):
+                with patch('src.transcribe.pipeline.compress_audio_for_upload'):
+                    with patch('src.transcribe.pipeline.cleanup_temp_file'):
                         # Mock empty transcription result
                         mock_transcriber = Mock()
                         mock_transcriber_class.return_value = mock_transcriber
@@ -423,7 +423,7 @@ class TestTranscriptionEdgeCases:
         """Test handling of malformed transcription output."""
         input_audio = audio_file_samples['.mp3']['path']
         
-        with patch('core.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
+        with patch('src.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
             # Mock malformed response
             mock_transcriber = Mock()
             mock_transcriber_class.return_value = mock_transcriber
@@ -438,7 +438,7 @@ class TestTranscriptionEdgeCases:
         """Test handling of network timeouts."""
         input_audio = audio_file_samples['.mp3']['path']
         
-        with patch('core.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
+        with patch('src.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
             # Mock network timeout
             mock_transcriber = Mock()
             mock_transcriber_class.return_value = mock_transcriber
@@ -457,10 +457,10 @@ class TestTranscriptionEdgeCases:
         output_dir = tmp_path / "output"
         
         # Mock disk space error during file writing
-        with patch('core.transcribe.formatting.format_transcript_output') as mock_format:
+        with patch('src.transcribe.formatting.format_transcript_output') as mock_format:
             mock_format.side_effect = OSError("No space left on device")
             
-            with patch('core.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
+            with patch('src.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
                 mock_transcriber = Mock()
                 mock_transcriber_class.return_value = mock_transcriber
                 mock_transcriber.transcribe.return_value = {"segments": []}

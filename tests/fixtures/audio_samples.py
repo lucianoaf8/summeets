@@ -9,34 +9,46 @@ import json
 import tempfile
 import shutil
 
+from tests.fixtures.valid_audio_generator import (
+    generate_silence_wav, generate_wav_bytes, generate_tone_wav
+)
+
 
 @pytest.fixture
 def audio_file_samples(tmp_path):
-    """Create comprehensive audio file samples for testing."""
+    """Create comprehensive audio file samples for testing with valid audio data."""
     samples = {}
-    
-    # High quality formats
+
+    # Create valid WAV file first
+    wav_file = tmp_path / "meeting_audio.wav"
+    generate_silence_wav(wav_file, duration_seconds=2.0, sample_rate=44100, channels=2)
+    samples['.wav'] = {
+        'path': wav_file,
+        'metadata': {'priority': 3, 'codec': 'pcm', 'quality': 'uncompressed'},
+        'size': wav_file.stat().st_size
+    }
+
+    # High quality formats - use valid WAV bytes for content
     formats = {
         '.m4a': {'priority': 1, 'codec': 'aac', 'quality': 'high'},
         '.flac': {'priority': 2, 'codec': 'flac', 'quality': 'lossless'},
-        '.wav': {'priority': 3, 'codec': 'pcm', 'quality': 'uncompressed'},
         '.mka': {'priority': 4, 'codec': 'various', 'quality': 'high'},
         '.ogg': {'priority': 5, 'codec': 'vorbis', 'quality': 'medium'},
         '.mp3': {'priority': 6, 'codec': 'mp3', 'quality': 'medium'},
         '.webm': {'priority': 7, 'codec': 'opus', 'quality': 'medium'}
     }
-    
+
     for ext, metadata in formats.items():
         file_path = tmp_path / f"meeting_audio{ext}"
-        # Create fake audio data with varying sizes
-        size = 1024 * (10 - metadata['priority'])  # Larger for higher priority
-        file_path.write_bytes(b"fake audio data " * size)
+        # Use valid WAV bytes as content - tests should mock FFmpeg for format-specific ops
+        duration = 0.5 * (10 - metadata['priority'])  # Longer for higher priority
+        file_path.write_bytes(generate_wav_bytes(duration_seconds=max(0.5, duration)))
         samples[ext] = {
             'path': file_path,
             'metadata': metadata,
             'size': file_path.stat().st_size
         }
-    
+
     # Create corrupted file
     corrupted_file = tmp_path / "corrupted.mp3"
     corrupted_file.write_bytes(b"not audio data")
@@ -45,17 +57,17 @@ def audio_file_samples(tmp_path):
         'metadata': {'quality': 'corrupted'},
         'size': corrupted_file.stat().st_size
     }
-    
-    # Create normalized versions
+
+    # Create normalized versions with valid audio
     for ext in ['.mp3', '.m4a']:
         norm_file = tmp_path / f"meeting_audio_norm{ext}"
-        norm_file.write_bytes(b"normalized audio data " * 512)
+        norm_file.write_bytes(generate_wav_bytes(duration_seconds=1.0))
         samples[f'normalized{ext}'] = {
             'path': norm_file,
             'metadata': {'quality': 'normalized'},
             'size': norm_file.stat().st_size
         }
-    
+
     return samples
 
 
@@ -93,24 +105,33 @@ def directory_with_mixed_files(tmp_path):
     """Create directory with mixed audio files for selection testing."""
     audio_dir = tmp_path / "mixed_audio"
     audio_dir.mkdir()
-    
-    # Create various quality audio files
-    files = {
-        'meeting_high.flac': b"high quality audio " * 2048,
-        'meeting_medium.mp3': b"medium quality audio " * 1024,
-        'meeting_low.ogg': b"low quality audio " * 512,
-        'other_audio.wav': b"other audio " * 1024,
+
+    created_files = []
+
+    # Create valid audio files with different durations for quality ranking
+    audio_configs = {
+        'meeting_high.flac': 2.0,
+        'meeting_medium.mp3': 1.5,
+        'meeting_low.ogg': 1.0,
+        'other_audio.wav': 1.0,
+        '.hidden_audio.mp3': 0.5,
+    }
+
+    for filename, duration in audio_configs.items():
+        file_path = audio_dir / filename
+        file_path.write_bytes(generate_wav_bytes(duration_seconds=duration))
+        created_files.append(file_path)
+
+    # Create non-audio files
+    non_audio = {
         'readme.txt': b"This is not an audio file",
         'image.jpg': b"fake image data",
-        '.hidden_audio.mp3': b"hidden audio file " * 256,
     }
-    
-    created_files = []
-    for filename, content in files.items():
+    for filename, content in non_audio.items():
         file_path = audio_dir / filename
         file_path.write_bytes(content)
         created_files.append(file_path)
-    
+
     return {
         'directory': audio_dir,
         'files': created_files,
@@ -185,24 +206,24 @@ def large_audio_file_mock(tmp_path):
 def compressed_audio_samples(tmp_path):
     """Create audio samples for compression testing."""
     samples = {}
-    
-    # Original file
+
+    # Original file - valid WAV (larger)
     original = tmp_path / "original.wav"
-    original.write_bytes(b"uncompressed audio data " * 4096)  # Larger file
-    
-    # Compressed versions
+    generate_silence_wav(original, duration_seconds=5.0, sample_rate=44100, channels=2)
+
+    # Compressed versions - smaller valid audio
     compressed_opus = tmp_path / "compressed.opus"
-    compressed_opus.write_bytes(b"compressed audio data " * 512)  # Much smaller
-    
+    compressed_opus.write_bytes(generate_wav_bytes(duration_seconds=1.0))
+
     compressed_mp3 = tmp_path / "compressed.mp3"
-    compressed_mp3.write_bytes(b"compressed audio data " * 1024)
-    
+    compressed_mp3.write_bytes(generate_wav_bytes(duration_seconds=2.0))
+
     samples.update({
         'original': {'path': original, 'size': original.stat().st_size, 'format': 'wav'},
         'opus': {'path': compressed_opus, 'size': compressed_opus.stat().st_size, 'format': 'opus'},
         'mp3': {'path': compressed_mp3, 'size': compressed_mp3.stat().st_size, 'format': 'mp3'}
     })
-    
+
     return samples
 
 
@@ -219,23 +240,14 @@ def audio_conversion_matrix():
     }
 
 
-def create_test_audio_file(path: Path, duration: float = 10.0, 
+def create_test_audio_file(path: Path, duration: float = 10.0,
                           sample_rate: int = 44100, channels: int = 2) -> Path:
     """
-    Utility function to create test audio files with specified parameters.
-    Creates fake binary data that simulates audio files.
+    Utility function to create valid test audio files with specified parameters.
+    Creates actual valid WAV files that FFmpeg can process.
     """
-    # Calculate approximate file size based on parameters
-    bytes_per_sample = 2  # 16-bit
-    total_samples = int(duration * sample_rate * channels)
-    file_size = total_samples * bytes_per_sample
-    
-    # Create fake audio data
-    fake_data = b"audio" * (file_size // 5)
-    if len(fake_data) < file_size:
-        fake_data += b"0" * (file_size - len(fake_data))
-    
-    path.write_bytes(fake_data[:file_size])
+    generate_silence_wav(path, duration_seconds=duration,
+                        sample_rate=sample_rate, channels=channels)
     return path
 
 

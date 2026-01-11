@@ -15,8 +15,30 @@ Or run demo mode:
 
 from .app import SummeetsApp, run
 from .demo import SummeetsDemo
+from .processing import ProcessingController, WorkflowAdapter
+from .exceptions import TUIError, format_error_for_display
+from .constants import (
+    VIDEO_EXTENSIONS,
+    AUDIO_EXTENSIONS,
+    TRANSCRIPT_EXTENSIONS,
+    VALID_PROVIDERS,
+    DEFAULT_MODELS,
+)
 
-__all__ = ["SummeetsApp", "SummeetsDemo", "run"]
+__all__ = [
+    "SummeetsApp",
+    "SummeetsDemo",
+    "run",
+    "ProcessingController",
+    "WorkflowAdapter",
+    "TUIError",
+    "format_error_for_display",
+    "VIDEO_EXTENSIONS",
+    "AUDIO_EXTENSIONS",
+    "TRANSCRIPT_EXTENSIONS",
+    "VALID_PROVIDERS",
+    "DEFAULT_MODELS",
+]
 
 
 def run_demo():

@@ -58,7 +58,7 @@ class TestAudioProcessingPerformance:
         with measure_time() as get_duration:
             with measure_memory() as get_memory:
                 # Mock ffprobe info
-                with patch('core.audio.ffmpeg_ops.ffprobe_info') as mock_probe:
+                with patch('src.audio.ffmpeg_ops.ffprobe_info') as mock_probe:
                     mock_probe.return_value = large_audio_metadata
                     
                     result = extract_audio_from_video(
@@ -117,7 +117,7 @@ class TestAudioProcessingPerformance:
             }
         
         with measure_time() as get_duration:
-            with patch('core.audio.ffmpeg_ops.ffprobe_info', side_effect=mock_probe_side_effect):
+            with patch('src.audio.ffmpeg_ops.ffprobe_info', side_effect=mock_probe_side_effect):
                 ranked_files = rank_audio_files(audio_files)
         
         duration = get_duration()
@@ -157,7 +157,7 @@ class TestTranscriptionPerformance:
         assert memory_used < 20 * 1024 * 1024  # Should use less than 20MB
         assert len(chunks) > 1  # Should create multiple chunks
     
-    @patch('core.transcribe.replicate_api.ReplicateTranscriber')
+    @patch('src.transcribe.replicate_api.ReplicateTranscriber')
     def test_transcription_pipeline_performance(self, mock_transcriber_class):
         """Test transcription pipeline performance."""
         from src.transcribe.pipeline import TranscriptionPipeline
@@ -182,9 +182,9 @@ class TestTranscriptionPerformance:
         audio_file.write_bytes(b"fake audio data")
         
         with measure_time() as get_duration:
-            with patch('core.transcribe.pipeline.ensure_wav16k_mono'):
-                with patch('core.transcribe.pipeline.compress_audio_for_upload'):
-                    with patch('core.transcribe.pipeline.cleanup_temp_file'):
+            with patch('src.transcribe.pipeline.ensure_wav16k_mono'):
+                with patch('src.transcribe.pipeline.compress_audio_for_upload'):
+                    with patch('src.transcribe.pipeline.cleanup_temp_file'):
                         pipeline = TranscriptionPipeline()
                         result = pipeline.run(audio_file, temp_dir / "output")
         
@@ -202,7 +202,7 @@ class TestTranscriptionPerformance:
 class TestSummarizationPerformance:
     """Test performance of summarization operations."""
     
-    @patch('core.providers.openai_client.create_openai_summary')
+    @patch('src.providers.openai_client.summarize_text')
     def test_summarization_performance(self, mock_openai_summary):
         """Test summarization performance with large transcripts."""
         from src.summarize.pipeline import summarize_run
@@ -269,7 +269,7 @@ class TestSummarizationPerformance:
             })
         
         with measure_time() as get_duration:
-            with patch('core.providers.openai_client.create_openai_summary') as mock_summary:
+            with patch('src.providers.openai_client.summarize_text') as mock_summary:
                 mock_summary.side_effect = mock_cod_responses
                 
                 final_summary = apply_chain_of_density(
@@ -290,9 +290,9 @@ class TestSummarizationPerformance:
 class TestWorkflowPerformance:
     """Test performance of complete workflows."""
     
-    @patch('core.workflow.extract_audio_from_video')
-    @patch('core.workflow.transcribe_run')
-    @patch('core.workflow.summarize_run')
+    @patch('src.workflow.extract_audio_from_video')
+    @patch('src.workflow.transcribe_run')
+    @patch('src.workflow.summarize_run')
     def test_full_workflow_performance(self, mock_summarize, mock_transcribe, mock_extract):
         """Test performance of complete video-to-summary workflow."""
         from src.workflow import WorkflowEngine, WorkflowConfig
@@ -318,7 +318,7 @@ class TestWorkflowPerformance:
         
         with measure_time() as get_duration:
             with measure_memory() as get_memory:
-                with patch('core.utils.validation.validate_workflow_input') as mock_validate:
+                with patch('src.utils.validation.validate_workflow_input') as mock_validate:
                     mock_validate.return_value = (video_file, "video")
                     
                     engine = WorkflowEngine(config)
@@ -350,8 +350,8 @@ class TestWorkflowPerformance:
             audio_files.append(audio_file)
         
         # Mock all operations to be fast
-        with patch('core.workflow.transcribe_run') as mock_transcribe:
-            with patch('core.workflow.summarize_run') as mock_summarize:
+        with patch('src.workflow.transcribe_run') as mock_transcribe:
+            with patch('src.workflow.summarize_run') as mock_summarize:
                 mock_transcribe.return_value = temp_dir / "transcript.json"
                 mock_summarize.return_value = temp_dir / "summary.json"
                 
@@ -363,7 +363,7 @@ class TestWorkflowPerformance:
                         process_audio=False
                     )
                     
-                    with patch('core.utils.validation.validate_workflow_input') as mock_validate:
+                    with patch('src.utils.validation.validate_workflow_input') as mock_validate:
                         mock_validate.return_value = (audio_file, "audio")
                         
                         engine = WorkflowEngine(config)

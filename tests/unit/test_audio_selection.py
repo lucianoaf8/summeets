@@ -110,9 +110,12 @@ class TestScoreAudioFile:
         }
         
         score = score_audio_file(audio_file, audio_info)
-        
-        # Should include format score plus quality bonuses
-        expected_min = FORMAT_SCORES[".wav"] + 48 + 128 + 1  # Sample rate/1000 + bitrate/1000 + duration bonus
+
+        # Should include format score plus quality bonuses (with caps)
+        # Sample rate: min(48000/1000, 100) = 48
+        # Bit rate: min(128000/1000, 50) = 50 (capped)
+        # Duration: min(3600/3600, 10) = 1
+        expected_min = FORMAT_SCORES[".wav"] + 48 + 50 + 1
         assert score >= expected_min
 
 
@@ -134,7 +137,7 @@ class TestPickBestAudio:
         mp3_file.touch()
         flac_file.touch()
         
-        with patch('core.audio.selection.ffprobe_info') as mock_ffprobe:
+        with patch('src.audio.selection.ffprobe_info') as mock_ffprobe:
             mock_ffprobe.return_value = {}
             result = pick_best_audio(tmp_path)
         
@@ -148,14 +151,14 @@ class TestPickBestAudio:
         regular_flac.touch()
         norm_mp3.touch()
         
-        with patch('core.audio.selection.ffprobe_info') as mock_ffprobe:
+        with patch('src.audio.selection.ffprobe_info') as mock_ffprobe:
             mock_ffprobe.return_value = {}
             result = pick_best_audio(tmp_path)
         
         # Normalized MP3 should beat regular FLAC due to 1000 point bonus
         assert result == norm_mp3
     
-    @patch('core.audio.selection.ffprobe_info')
+    @patch('src.audio.selection.ffprobe_info')
     def test_audio_quality_preference(self, mock_ffprobe, tmp_path):
         """Test preference based on audio quality metrics."""
         low_quality = tmp_path / "low.mp3"
@@ -180,7 +183,7 @@ class TestPickBestAudio:
         audio_file = tmp_path / "test.mp3"
         audio_file.touch()
         
-        with patch('core.audio.selection.ffprobe_info') as mock_ffprobe:
+        with patch('src.audio.selection.ffprobe_info') as mock_ffprobe:
             mock_ffprobe.side_effect = Exception("FFprobe failed")
             
             # Should still work with basic scoring
@@ -211,7 +214,7 @@ def mock_audio_files(tmp_path):
 
 def test_integration_full_selection_process(mock_audio_files, tmp_path):
     """Integration test for the complete selection process."""
-    with patch('core.audio.selection.ffprobe_info') as mock_ffprobe:
+    with patch('src.audio.selection.ffprobe_info') as mock_ffprobe:
         # Mock consistent audio info
         mock_ffprobe.return_value = {
             "sample_rate": 44100,

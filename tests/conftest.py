@@ -17,10 +17,14 @@ logging.basicConfig(
 )
 
 # Disable logging during tests unless specifically needed
-logging.getLogger('core').setLevel(logging.WARNING)
+logging.getLogger('src').setLevel(logging.WARNING)
 
-# Test plugins
-pytest_plugins = []
+# Test plugins - load fixtures from fixture files
+pytest_plugins = [
+    'tests.fixtures.audio_samples',
+    'tests.fixtures.transcript_samples',
+    'tests.fixtures.mock_services',
+]
 
 
 @pytest.fixture
@@ -33,21 +37,36 @@ def temp_dir():
 
 @pytest.fixture
 def audio_file_samples(temp_dir):
-    """Create sample audio files for testing."""
+    """Create sample audio files for testing with valid audio data."""
+    from tests.fixtures.valid_audio_generator import (
+        generate_silence_wav, generate_wav_bytes
+    )
+
     samples = {}
-    
-    # Create files with different extensions
-    formats = ['.mp3', '.wav', '.flac', '.m4a', '.ogg']
-    for fmt in formats:
+
+    # Create valid WAV file (FFmpeg can process this)
+    wav_file = temp_dir / "sample.wav"
+    generate_silence_wav(wav_file, duration_seconds=1.0, sample_rate=16000, channels=1)
+    samples['.wav'] = wav_file
+
+    # For other formats, we create WAV files with those extensions
+    # These won't be valid format-wise but tests should mock FFmpeg anyway
+    for fmt in ['.mp3', '.flac', '.m4a', '.ogg']:
         file_path = temp_dir / f"sample{fmt}"
-        file_path.write_bytes(b"fake audio data")
+        # Use valid WAV bytes so file has valid audio structure
+        file_path.write_bytes(generate_wav_bytes(duration_seconds=0.5))
         samples[fmt] = file_path
-    
+
     # Create a normalized version
-    norm_file = temp_dir / "sample_norm.mp3"
-    norm_file.write_bytes(b"fake normalized audio data")
+    norm_file = temp_dir / "sample_norm.wav"
+    generate_silence_wav(norm_file, duration_seconds=1.0, sample_rate=16000, channels=1)
     samples['norm'] = norm_file
-    
+
+    # Create corrupted file for error testing
+    corrupted = temp_dir / "corrupted.mp3"
+    corrupted.write_bytes(b"not valid audio")
+    samples['corrupted'] = corrupted
+
     return samples
 
 
@@ -84,7 +103,7 @@ def mock_ffprobe():
                 "size": 4000000
             }
     
-    with patch('core.audio.ffmpeg_ops.ffprobe_info', side_effect=mock_info) as mock:
+    with patch('src.audio.ffmpeg_ops.ffprobe_info', side_effect=mock_info) as mock:
         yield mock
 
 
@@ -158,7 +177,7 @@ def mock_settings():
     settings.data_dir = Path("/tmp/summeets_test")
     settings.out_dir = Path("/tmp/summeets_test/output")
     
-    with patch('core.config.SETTINGS', settings):
+    with patch('src.config.SETTINGS', settings):
         yield settings
 
 
@@ -190,15 +209,15 @@ def enable_logging():
     """Enable detailed logging for specific tests."""
     # Store original levels
     original_levels = {}
-    loggers_to_enable = ['core.audio', 'core.transcription', 'core.validation']
-    
+    loggers_to_enable = ['src.audio', 'src.transcribe', 'src.utils.validation']
+
     for logger_name in loggers_to_enable:
         logger = logging.getLogger(logger_name)
         original_levels[logger_name] = logger.level
         logger.setLevel(logging.DEBUG)
-    
+
     yield
-    
+
     # Restore original levels
     for logger_name, level in original_levels.items():
         logging.getLogger(logger_name).setLevel(level)
