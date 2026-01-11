@@ -941,6 +941,411 @@ class MaskedInput(Input):
             self.value = value
 
 
+# =============================================================================
+# EXECUTION PANEL (New - replaces file explorer)
+# =============================================================================
+
+class ExecutionPanel(Container):
+    """
+    Execution panel with:
+    - Flow type selector (Video/Audio/Transcript)
+    - File picker with browse button
+    - Template checkboxes
+    - Config settings (non-API keys)
+    """
+
+    DEFAULT_CSS = """
+    ExecutionPanel {
+        height: 1fr;
+        padding: 1;
+    }
+
+    ExecutionPanel .section-title {
+        text-style: bold;
+        color: #38bdf8;
+        margin-bottom: 1;
+        text-align: center;
+    }
+
+    ExecutionPanel .subsection-title {
+        text-style: bold;
+        color: #818cf8;
+        margin-top: 1;
+        margin-bottom: 0;
+    }
+
+    ExecutionPanel .flow-group {
+        height: auto;
+        padding: 1;
+        background: #1e293b;
+        border: solid #334155;
+        margin-bottom: 1;
+    }
+
+    ExecutionPanel .flow-label {
+        color: #94a3b8;
+        margin-bottom: 1;
+    }
+
+    ExecutionPanel .flow-buttons {
+        height: auto;
+    }
+
+    ExecutionPanel .flow-btn {
+        width: 1fr;
+        margin: 0 1 0 0;
+    }
+
+    ExecutionPanel .flow-btn.-active {
+        background: #38bdf8;
+        color: #0a0e1a;
+        text-style: bold;
+    }
+
+    ExecutionPanel .file-group {
+        height: auto;
+        padding: 1;
+        background: #1e293b;
+        border: solid #334155;
+        margin-bottom: 1;
+    }
+
+    ExecutionPanel .file-row {
+        height: auto;
+    }
+
+    ExecutionPanel #file-path {
+        width: 1fr;
+    }
+
+    ExecutionPanel #btn-browse {
+        width: auto;
+        min-width: 10;
+        margin-left: 1;
+        background: #374151;
+    }
+
+    ExecutionPanel #btn-browse:hover {
+        background: #38bdf8;
+        color: #0a0e1a;
+    }
+
+    ExecutionPanel .file-info {
+        color: #64748b;
+        height: auto;
+        margin-top: 1;
+    }
+
+    ExecutionPanel .template-group {
+        height: auto;
+        padding: 1;
+        background: #1e293b;
+        border: solid #334155;
+        margin-bottom: 1;
+    }
+
+    ExecutionPanel .template-group Checkbox {
+        margin: 0;
+        padding: 0;
+        height: auto;
+    }
+
+    ExecutionPanel .template-group Checkbox.disabled-template {
+        opacity: 0.4;
+    }
+
+    ExecutionPanel .config-group {
+        height: auto;
+        padding: 1;
+        background: #1e293b;
+        border: solid #334155;
+        margin-bottom: 1;
+    }
+
+    ExecutionPanel Label {
+        color: #94a3b8;
+        margin-top: 1;
+    }
+
+    ExecutionPanel Select {
+        margin-bottom: 1;
+    }
+
+    ExecutionPanel Input {
+        margin-bottom: 1;
+    }
+
+    ExecutionPanel .action-group {
+        height: auto;
+        padding: 1;
+        dock: bottom;
+    }
+
+    ExecutionPanel #btn-run-workflow {
+        width: 100%;
+        background: #38bdf8;
+        color: #0a0e1a;
+        text-style: bold;
+    }
+
+    ExecutionPanel #btn-run-workflow:hover {
+        background: #818cf8;
+    }
+
+    ExecutionPanel #btn-run-workflow.btn-cancel-mode {
+        background: #ef4444;
+    }
+
+    ExecutionPanel #btn-run-workflow.btn-cancel-mode:hover {
+        background: #dc2626;
+    }
+    """
+
+    selected_flow: reactive[str] = reactive("video")
+    selected_file: reactive[Path | None] = reactive(None)
+
+    def __init__(self, env_path: Optional[Path] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.env_path = env_path or Path(".env")
+        self._env_values: dict[str, str] = load_env_file(self.env_path)
+
+    def compose(self) -> ComposeResult:
+        yield Static("◆ WORKFLOW EXECUTION", classes="section-title")
+
+        # Flow Type Selection
+        with Vertical(classes="flow-group"):
+            yield Static("Select Input Type:", classes="flow-label")
+            with Horizontal(classes="flow-buttons"):
+                yield Button("🎬 Video", id="flow-video", classes="flow-btn -active")
+                yield Button("🔊 Audio", id="flow-audio", classes="flow-btn")
+                yield Button("📝 Transcript", id="flow-transcript", classes="flow-btn")
+
+        # File Selection
+        with Vertical(classes="file-group"):
+            yield Static("Select File:", classes="flow-label")
+            with Horizontal(classes="file-row"):
+                yield Input(placeholder="Click Browse or drop file path...", id="file-path")
+                yield Button("📂 Browse", id="btn-browse")
+            yield Static("No file selected", classes="file-info", id="file-info-display")
+
+        # Template Options
+        with Vertical(classes="template-group"):
+            yield Static("Templates:", classes="flow-label")
+            yield Checkbox("Auto-detect template", value=True, id="exec-tpl-auto-detect")
+            yield Checkbox("Default", value=False, id="exec-tpl-default", classes="disabled-template")
+            yield Checkbox("SOP", value=False, id="exec-tpl-sop", classes="disabled-template")
+            yield Checkbox("Decision Log", value=False, id="exec-tpl-decision", classes="disabled-template")
+            yield Checkbox("Brainstorm", value=False, id="exec-tpl-brainstorm", classes="disabled-template")
+            yield Checkbox("Requirements", value=False, id="exec-tpl-requirements", classes="disabled-template")
+
+        # Config Settings (non-API)
+        with Vertical(classes="config-group"):
+            yield Static("Settings:", classes="flow-label")
+
+            yield Label("LLM Provider")
+            provider_value = self._env_values.get("LLM_PROVIDER", "openai")
+            if provider_value not in ("openai", "anthropic"):
+                provider_value = "openai"
+            yield Select(
+                options=[("OpenAI", "openai"), ("Anthropic", "anthropic")],
+                value=provider_value,
+                id="exec-provider"
+            )
+
+            yield Label("Model")
+            yield Input(
+                value=self._env_values.get("LLM_MODEL", "gpt-4o-mini"),
+                id="exec-model"
+            )
+
+            with Collapsible(title="Advanced Options", collapsed=True):
+                yield Label("Chunk Size (seconds)")
+                yield Input(
+                    value=self._env_values.get("SUMMARY_CHUNK_SECONDS", "1800"),
+                    id="exec-chunk-size"
+                )
+
+                yield Label("CoD Passes")
+                yield Input(
+                    value=self._env_values.get("SUMMARY_COD_PASSES", "2"),
+                    id="exec-cod-passes"
+                )
+
+                yield Label("Max Output Tokens")
+                yield Input(
+                    value=self._env_values.get("SUMMARY_MAX_OUTPUT_TOKENS", "3000"),
+                    id="exec-max-tokens"
+                )
+
+                yield Checkbox("Normalize audio", value=True, id="exec-normalize")
+                yield Checkbox("Increase volume", value=False, id="exec-increase-volume")
+
+        # Action Button
+        with Vertical(classes="action-group"):
+            yield Button("▶  Run Workflow", id="btn-run-workflow")
+
+    def on_mount(self) -> None:
+        """Initialize template checkbox states."""
+        self._update_template_states()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle flow type button clicks."""
+        btn_id = event.button.id
+        if btn_id and btn_id.startswith("flow-"):
+            flow_type = btn_id.replace("flow-", "")
+            self._set_active_flow(flow_type)
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        """Handle template checkbox changes."""
+        if event.checkbox.id == "exec-tpl-auto-detect":
+            self._update_template_states()
+
+    def _set_active_flow(self, flow_type: str) -> None:
+        """Set the active flow type button."""
+        self.selected_flow = flow_type
+        for btn_id in ["flow-video", "flow-audio", "flow-transcript"]:
+            try:
+                btn = self.query_one(f"#{btn_id}", Button)
+                if btn_id == f"flow-{flow_type}":
+                    btn.add_class("-active")
+                else:
+                    btn.remove_class("-active")
+            except Exception:
+                pass
+
+    def _update_template_states(self) -> None:
+        """Update template checkbox enabled/disabled states."""
+        try:
+            auto_detect = self.query_one("#exec-tpl-auto-detect", Checkbox)
+            is_auto = auto_detect.value
+
+            template_ids = ["exec-tpl-default", "exec-tpl-sop", "exec-tpl-decision",
+                          "exec-tpl-brainstorm", "exec-tpl-requirements"]
+
+            for tpl_id in template_ids:
+                try:
+                    cb = self.query_one(f"#{tpl_id}", Checkbox)
+                    cb.disabled = is_auto
+                    if is_auto:
+                        cb.value = False
+                        cb.add_class("disabled-template")
+                    else:
+                        cb.remove_class("disabled-template")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def set_file(self, file_path: Path) -> None:
+        """Set the selected file and update display."""
+        self.selected_file = file_path
+        try:
+            self.query_one("#file-path", Input).value = str(file_path)
+
+            # Update file info
+            if file_path.exists():
+                size = file_path.stat().st_size
+                size_str = self._fmt_size(size)
+                ext = file_path.suffix.lower()
+                self.query_one("#file-info-display", Static).update(
+                    f"✓ {file_path.name} ({size_str}, {ext[1:].upper()})"
+                )
+            else:
+                self.query_one("#file-info-display", Static).update(
+                    f"⚠ File not found: {file_path.name}"
+                )
+        except Exception:
+            pass
+
+    def _fmt_size(self, size: int) -> str:
+        """Format file size for display."""
+        for unit in ["B", "KB", "MB", "GB"]:
+            if size < 1024:
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{size:.1f} TB"
+
+    def get_config(self) -> dict:
+        """Extract current configuration values."""
+        try:
+            # Get selected templates
+            auto_detect = self.query_one("#exec-tpl-auto-detect", Checkbox).value
+            selected_templates = []
+
+            if not auto_detect:
+                template_map = {
+                    "exec-tpl-default": "default",
+                    "exec-tpl-sop": "sop",
+                    "exec-tpl-decision": "decision",
+                    "exec-tpl-brainstorm": "brainstorm",
+                    "exec-tpl-requirements": "requirements",
+                }
+                for tpl_id, tpl_name in template_map.items():
+                    try:
+                        if self.query_one(f"#{tpl_id}", Checkbox).value:
+                            selected_templates.append(tpl_name)
+                    except Exception:
+                        pass
+
+            templates = selected_templates if selected_templates else ["default"]
+            return {
+                "provider": self.query_one("#exec-provider", Select).value or "openai",
+                "model": self.query_one("#exec-model", Input).value or "gpt-4o-mini",
+                "templates": templates,
+                "template": templates[0] if templates else "default",
+                "auto_detect": auto_detect,
+                "chunk_seconds": int(self.query_one("#exec-chunk-size", Input).value or 1800),
+                "cod_passes": int(self.query_one("#exec-cod-passes", Input).value or 2),
+                "max_tokens": int(self.query_one("#exec-max-tokens", Input).value or 3000),
+                "normalize": self.query_one("#exec-normalize", Checkbox).value,
+                "increase_volume": self.query_one("#exec-increase-volume", Checkbox).value,
+                "flow_type": self.selected_flow,
+            }
+        except Exception:
+            return {
+                "provider": "openai",
+                "model": "gpt-4o-mini",
+                "templates": ["default"],
+                "template": "default",
+                "auto_detect": True,
+                "chunk_seconds": 1800,
+                "cod_passes": 2,
+                "max_tokens": 3000,
+                "normalize": True,
+                "increase_volume": False,
+                "flow_type": "video",
+            }
+
+    def set_processing(self, is_processing: bool) -> None:
+        """Toggle Run button between Run/Cancel modes."""
+        try:
+            btn = self.query_one("#btn-run-workflow", Button)
+            if is_processing:
+                btn.label = "■  Cancel"
+                btn.add_class("btn-cancel-mode")
+            else:
+                btn.label = "▶  Run Workflow"
+                btn.remove_class("btn-cancel-mode")
+        except Exception:
+            pass
+
+    def sync_from_config(self, config_values: dict) -> None:
+        """Sync settings from the config panel."""
+        try:
+            if "provider" in config_values:
+                self.query_one("#exec-provider", Select).value = config_values["provider"]
+            if "model" in config_values:
+                self.query_one("#exec-model", Input).value = config_values["model"]
+            if "chunk_seconds" in config_values:
+                self.query_one("#exec-chunk-size", Input).value = str(config_values["chunk_seconds"])
+            if "cod_passes" in config_values:
+                self.query_one("#exec-cod-passes", Input).value = str(config_values["cod_passes"])
+            if "max_tokens" in config_values:
+                self.query_one("#exec-max-tokens", Input).value = str(config_values["max_tokens"])
+        except Exception:
+            pass
+
+
 class EnvConfigPanel(Container):
     """
     Panel for viewing and editing .env configuration.

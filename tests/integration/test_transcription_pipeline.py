@@ -26,7 +26,7 @@ class TestTranscriptionPipelineIntegration:
                                            audio_file_samples, tmp_path):
         """Test complete transcription pipeline from audio to output files."""
         # Setup
-        input_audio = audio_file_samples['.mp3']['path']
+        input_audio = audio_file_samples['.mp3']
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         
@@ -108,7 +108,7 @@ class TestTranscriptionPipelineIntegration:
     def test_transcription_with_progress_tracking(self, mock_transcriber_class, 
                                                 audio_file_samples, tmp_path):
         """Test transcription pipeline with progress tracking."""
-        input_audio = audio_file_samples['.m4a']['path']
+        input_audio = audio_file_samples['.m4a']
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         
@@ -166,7 +166,7 @@ class TestTranscriptionPipelineIntegration:
     def test_transcription_error_handling(self, mock_transcriber_class, 
                                         audio_file_samples, tmp_path):
         """Test transcription pipeline error handling."""
-        input_audio = audio_file_samples['.mp3']['path']
+        input_audio = audio_file_samples['.mp3']
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         
@@ -242,7 +242,7 @@ class TestTranscriptionPipelineIntegration:
         # Test transcriber
         transcriber = ReplicateTranscriber(api_token="test-token")
         
-        audio_file = audio_file_samples['.mp3']['path']
+        audio_file = audio_file_samples['.mp3']
         result = transcriber.transcribe(audio_file)
         
         # Verify API calls
@@ -340,7 +340,7 @@ class TestTranscriptionPipelineIntegration:
     
     def test_convenience_function_integration(self, audio_file_samples, tmp_path):
         """Test the convenience transcribe_run function."""
-        input_audio = audio_file_samples['.wav']['path']
+        input_audio = audio_file_samples['.wav']
         output_dir = tmp_path / "output"
         
         # Mock the pipeline
@@ -400,7 +400,7 @@ class TestTranscriptionEdgeCases:
     
     def test_empty_transcription_result(self, audio_file_samples, tmp_path):
         """Test handling of empty transcription results."""
-        input_audio = audio_file_samples['.mp3']['path']
+        input_audio = audio_file_samples['.mp3']
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         
@@ -421,7 +421,7 @@ class TestTranscriptionEdgeCases:
     
     def test_malformed_transcription_output(self, audio_file_samples, tmp_path):
         """Test handling of malformed transcription output."""
-        input_audio = audio_file_samples['.mp3']['path']
+        input_audio = audio_file_samples['.mp3']
         
         with patch('src.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
             # Mock malformed response
@@ -436,7 +436,7 @@ class TestTranscriptionEdgeCases:
     
     def test_network_timeout_handling(self, audio_file_samples):
         """Test handling of network timeouts."""
-        input_audio = audio_file_samples['.mp3']['path']
+        input_audio = audio_file_samples['.mp3']
         
         with patch('src.transcribe.pipeline.ReplicateTranscriber') as mock_transcriber_class:
             # Mock network timeout
@@ -453,7 +453,7 @@ class TestTranscriptionEdgeCases:
     
     def test_insufficient_disk_space(self, audio_file_samples, tmp_path):
         """Test handling of insufficient disk space."""
-        input_audio = audio_file_samples['.mp3']['path']
+        input_audio = audio_file_samples['.mp3']
         output_dir = tmp_path / "output"
         
         # Mock disk space error during file writing

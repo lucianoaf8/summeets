@@ -4,7 +4,7 @@ Replaces the monolithic transcribe.py with focused, testable components.
 """
 import logging
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Callable, Optional, Tuple, List
 
 from ..utils.config import SETTINGS
 from ..audio import pick_best_audio, ensure_wav16k_mono, compress_audio_for_upload, cleanup_temp_file
@@ -23,31 +23,41 @@ class TranscriptionPipeline:
         """Initialize the pipeline with default settings."""
         self.transcriber = ReplicateTranscriber()
     
-    def process_audio_input(self, audio_path: Optional[Path] = None) -> Path:
+    def process_audio_input(
+        self,
+        audio_path: Optional[Path] = None,
+        path_callback: Optional[callable] = None
+    ) -> Path:
         """
         Process and validate audio input.
-        
+
         Args:
             audio_path: Optional path to audio file or directory
-            
+            path_callback: Optional callback to request path from user.
+                           Should return Path or None to cancel.
+
         Returns:
             Path to the selected audio file
-            
+
         Raises:
-            ValueError: If no valid audio found
+            ValueError: If no valid audio found or cancelled
+            FileNotFoundError: If audio path doesn't exist
         """
         if not audio_path:
-            # Prompt for path
-            user_input = input("\nEnter audio file or folder path: ").strip().strip('"')
-            audio_path = Path(user_input).resolve()
-        
+            if path_callback:
+                audio_path = path_callback()
+                if audio_path is None:
+                    raise ValueError("Audio path selection cancelled")
+            else:
+                raise ValueError("No audio path provided and no callback available")
+
         if not audio_path.exists():
             raise FileNotFoundError(f"Audio path not found: {audio_path}")
-        
+
         # Select best audio file if directory provided
         if audio_path.is_dir():
             audio_path = pick_best_audio(audio_path)
-        
+
         log.info(f"Using audio file: {audio_path}")
         return audio_path
     
@@ -140,20 +150,26 @@ class TranscriptionPipeline:
         
         return output_paths.get("json", base_path.with_suffix(".json"))
     
-    def run(self, audio_path: Optional[Path] = None, output_dir: Optional[Path] = None) -> Path:
+    def run(
+        self,
+        audio_path: Optional[Path] = None,
+        output_dir: Optional[Path] = None,
+        path_callback: Optional[callable] = None
+    ) -> Path:
         """
         Run the complete transcription pipeline.
-        
+
         Args:
             audio_path: Optional path to audio file or directory
             output_dir: Optional output directory (defaults to configured)
-            
+            path_callback: Optional callback for user path input
+
         Returns:
             Path to main JSON transcript file
         """
         try:
             # Process input
-            audio_path = self.process_audio_input(audio_path)
+            audio_path = self.process_audio_input(audio_path, path_callback)
             
             # Prepare audio
             prepared_path = self.prepare_audio(audio_path)
@@ -178,19 +194,24 @@ class TranscriptionPipeline:
             raise
 
 
-def run(audio_path: Optional[Path] = None, output_dir: Optional[Path] = None) -> Path:
+def run(
+    audio_path: Optional[Path] = None,
+    output_dir: Optional[Path] = None,
+    path_callback: Optional[callable] = None
+) -> Path:
     """
     Convenience function to run transcription pipeline.
-    
+
     Args:
         audio_path: Optional path to audio file or directory
         output_dir: Optional output directory
-        
+        path_callback: Optional callback for user path input
+
     Returns:
         Path to JSON transcript file
     """
     pipeline = TranscriptionPipeline()
-    return pipeline.run(audio_path, output_dir)
+    return pipeline.run(audio_path, output_dir, path_callback)
 
 
 # Legacy compatibility - remove progress bars from core logic

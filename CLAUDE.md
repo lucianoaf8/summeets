@@ -4,21 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Summeets** is a production-grade Python monorepo for transcribing and summarizing meetings with speaker diarization. It provides a shared processing core exposed through both CLI and GUI interfaces:
+**Summeets** is a production-grade Python monorepo for transcribing and summarizing meetings with speaker diarization. It provides a shared processing core exposed through CLI and TUI interfaces:
 
 ### Key Features
 - **Audio Processing**: FFmpeg-based normalization, extraction, and format conversion
 - **Transcription**: Replicate's `thomasmol/whisper-diarization` (Whisper v3 + Pyannote) for speaker-aware transcription
 - **Summarization**: Map-reduce + Chain-of-Density summarization with OpenAI GPT-4o or Anthropic Claude
-- **Dual Interface**: Full-featured CLI (`summeets`) and Electron GUI (`python main.py gui`) sharing the same core
+- **Dual Interface**: Full-featured CLI (`summeets`) and Textual TUI (`summeets tui`) sharing the same core
 - **Production Ready**: Structured logging, configuration management, error handling, comprehensive test suite
 
 ### Architecture
 The project follows clean architecture principles with clear separation of concerns:
 - **Source Module** (`src/`): Shared business logic, models, and utilities
 - **CLI Interface** (`cli/`): Typer-based command-line interface + Textual TUI
-- **GUI Interface** (`electron/`): Electron-based graphical user interface
-- **Main Entry Point**: Router that launches CLI or GUI based on arguments
+- **Archive** (`archive/`): Deprecated components (including legacy Electron GUI)
+- **Main Entry Point**: Router that launches CLI
 
 ## Dependencies
 
@@ -29,7 +29,7 @@ pip install -e .
 
 Core dependencies include:
 - `typer` - CLI framework
-- `ttkbootstrap` - Modern tkinter themes (removed - now using Electron)
+- `textual` - TUI framework for terminal-based graphical interface
 - `pydantic` + `pydantic-settings` - Configuration and validation
 - `openai` + `anthropic` - LLM providers for summarization
 - `replicate` - Transcription API
@@ -39,7 +39,6 @@ Core dependencies include:
 
 External dependencies:
 - `ffmpeg` and `ffprobe` (optional but recommended) - For audio/video processing
-- `Node.js` and `npm` - Required for Electron GUI
 
 ## Environment Setup
 
@@ -85,24 +84,21 @@ summeets probe input.mkv
 summeets config
 ```
 
-### GUI Interface
+### TUI Interface
 ```bash
-python main.py gui
-# or (default behavior)
-python main.py
+# Launch the Textual-based TUI
+summeets tui
 ```
 
-Requirements:
-- Node.js and npm must be installed
+The TUI provides a graphical terminal interface for running workflows with real-time progress tracking.
 
 ### Direct Execution
 ```bash
-# Default: launches GUI
+# Default: launches CLI
 python main.py
 
-# Explicit CLI/GUI
-python main.py cli transcribe audio.m4a
-python main.py gui
+# Or via installed package
+summeets [command]
 ```
 
 ## Code Architecture
@@ -141,10 +137,8 @@ summeets/
 │     ├─ app.py             # Main TUI app
 │     ├─ widgets.py         # Custom widgets
 │     └─ demo.py            # Demo/test mode
-├─ electron/                # Electron GUI application
-│  ├─ main.js               # Electron main process
-│  ├─ index.html            # GUI interface
-│  └─ preload.js            # Preload script
+├─ archive/                 # Deprecated components
+│  └─ electron_gui/         # Legacy Electron GUI (deprecated)
 ├─ main.py                  # Entry point router
 ├─ data/                    # Organized data storage
 │  ├─ input/                # Input files (by date)
@@ -216,7 +210,6 @@ python -m pytest tests/
 
 ### Entry Points
 - `summeets` command maps to `main:main` function
-- Both CLI and Electron GUI share the same core processing logic
+- CLI and TUI share the same core processing logic
 - Configuration is centralized through Pydantic settings
-- GUI runs via `python main.py gui` (launches Electron app)
-- Windows compatibility: Uses `npm.cmd` with `shell=True` for proper execution
+- TUI runs via `summeets tui` command

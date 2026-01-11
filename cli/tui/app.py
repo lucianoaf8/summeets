@@ -19,9 +19,9 @@ from textual.containers import Horizontal, Vertical, ScrollableContainer
 from textual.reactive import reactive
 from textual.widgets import (
     Button,
-    DirectoryTree,
     Footer,
     Header,
+    Input,
     Markdown,
     RichLog,
     Static,
@@ -34,9 +34,7 @@ from textual.css.query import NoMatches
 from .widgets import (
     ConfigPanel,
     EnvConfigPanel,
-    FileExplorer,
-    FileInfo,
-    FilteredDirectoryTree,
+    ExecutionPanel,
     PipelineStatus,
     ProgressPanel,
 )
@@ -50,8 +48,7 @@ from .messages import (
 )
 from .exceptions import format_error_for_display, classify_error
 from .constants import (
-    KEY_QUIT, KEY_RUN, KEY_CONFIG, KEY_CANCEL, KEY_REFRESH,
-    TEXT_EXTENSIONS, SYNTAX_STYLES,
+    KEY_QUIT, KEY_RUN, KEY_CONFIG, KEY_CANCEL,
 )
 
 
@@ -94,22 +91,16 @@ class SummeetsApp(App):
         height: 1fr;
     }
 
+    /* Two-panel layout: Config (left) | Execution (right) */
     #left-panel {
-        width: 28%;
+        width: 45%;
         background: #0f172a;
         border: solid #1e3a5f;
         margin: 0 0 0 1;
     }
 
-    #center-panel {
-        width: 44%;
-        background: #0f172a;
-        border: solid #1e3a5f;
-        margin: 0 1;
-    }
-
     #right-panel {
-        width: 28%;
+        width: 55%;
         background: #0f172a;
         border: solid #1e3a5f;
         margin: 0 1 0 0;
@@ -117,6 +108,12 @@ class SummeetsApp(App):
     }
 
     #config-scroll {
+        height: 1fr;
+        scrollbar-color: #38bdf8;
+        scrollbar-background: #1e293b;
+    }
+
+    #exec-scroll {
         height: 1fr;
         scrollbar-color: #38bdf8;
         scrollbar-background: #1e293b;
@@ -146,45 +143,6 @@ class SummeetsApp(App):
         margin: 1;
         padding: 1;
         scrollbar-color: #38bdf8;
-    }
-
-    #file-preview-container {
-        height: 1fr;
-        display: none;
-        background: #0c1322;
-        border: solid #1e3a5f;
-        margin: 1;
-    }
-
-    #file-preview-container.visible {
-        display: block;
-    }
-
-    #file-preview-header {
-        background: #1e293b;
-        color: #38bdf8;
-        text-style: bold;
-        padding: 0 1;
-        height: 1;
-    }
-
-    #file-preview {
-        height: 1fr;
-        padding: 1;
-        scrollbar-color: #38bdf8;
-    }
-
-    #close-preview {
-        dock: right;
-        width: auto;
-        min-width: 3;
-        background: #374151;
-        color: #94a3b8;
-    }
-
-    #close-preview:hover {
-        background: #ef4444;
-        color: white;
     }
 
     Footer {
@@ -255,6 +213,27 @@ class SummeetsApp(App):
         color: #0a0e1a;
     }
 
+    /* Execution panel inside right panel */
+    #execution-scroll {
+        height: auto;
+        scrollbar-color: #38bdf8;
+        scrollbar-background: #1e293b;
+    }
+
+    #pipeline-area {
+        height: auto;
+        padding: 0;
+    }
+
+    /* Checkbox styling */
+    Checkbox > .toggle--button {
+        color: #64748b;
+    }
+
+    Checkbox.-on > .toggle--button {
+        color: #38bdf8;
+    }
+
     """
 
     BINDINGS = [
@@ -262,7 +241,6 @@ class SummeetsApp(App):
         Binding(KEY_RUN, "run_workflow", "Run"),
         Binding(KEY_CONFIG, "focus_config", "Config"),
         Binding(KEY_CANCEL, "cancel_workflow", "Cancel"),
-        Binding(KEY_REFRESH, "refresh_explorer", "Refresh"),
     ]
 
     TITLE = "SUMMEETS"
@@ -278,42 +256,31 @@ class SummeetsApp(App):
         yield Header(show_clock=True)
 
         with Horizontal(id="main-container"):
-            # LEFT PANEL - File Browser
+            # LEFT PANEL - Config & Logs (Full Log as default)
             with Vertical(id="left-panel"):
-                yield Static("◆ FILE EXPLORER", classes="panel-header")
-                yield FileExplorer(".", id="file-explorer")
-                yield FileInfo(id="file-info")
-
-            # CENTER PANEL - Pipeline & Logs + File Preview
-            with Vertical(id="center-panel"):
-                yield PipelineStatus(id="pipeline")
-                yield ProgressPanel(id="progress-panel")
-
-                # File preview (hidden by default)
-                with Vertical(id="file-preview-container"):
-                    with Horizontal(id="file-preview-header"):
-                        yield Static("◆ FILE PREVIEW", id="preview-title")
-                        yield Button("✕", id="close-preview")
-                    yield RichLog(id="file-preview", highlight=True, markup=True, wrap=True)
-
-                yield Static("◆ ACTIVITY LOG", classes="panel-header")
-                yield RichLog(id="stage-log", highlight=True, markup=True, wrap=True)
-
-            # RIGHT PANEL - Config & Preview (scrollable)
-            with Vertical(id="right-panel"):
-                with TabbedContent():
-                    with TabPane("Config", id="config-tab"):
-                        with ScrollableContainer(id="config-scroll"):
-                            yield ConfigPanel(id="config")
-                    with TabPane("Preview", id="preview-tab"):
-                        with ScrollableContainer(id="preview-pane"):
-                            yield Markdown("*No summary available yet*", id="preview-md")
+                with TabbedContent(initial="log-tab"):
                     with TabPane("Full Log", id="log-tab"):
                         with Vertical(id="log-tab-container"):
                             with Horizontal(id="log-header"):
                                 yield Static("◆ FULL LOG")
                                 yield Button("📋 Copy", id="btn-copy-log")
                             yield RichLog(id="full-log", highlight=True, markup=True)
+                    with TabPane("Activity", id="activity-tab"):
+                        yield RichLog(id="stage-log", highlight=True, markup=True, wrap=True)
+                    with TabPane("Config", id="config-tab"):
+                        with ScrollableContainer(id="config-scroll"):
+                            yield ConfigPanel(id="config")
+                    with TabPane("Preview", id="preview-tab"):
+                        with ScrollableContainer(id="preview-pane"):
+                            yield Markdown("*No summary available yet*", id="preview-md")
+
+            # RIGHT PANEL - Execution (Flow, File, Templates, Settings, Pipeline)
+            with Vertical(id="right-panel"):
+                with ScrollableContainer(id="exec-scroll"):
+                    yield ExecutionPanel(id="execution")
+                    with Vertical(id="pipeline-area"):
+                        yield PipelineStatus(id="pipeline")
+                        yield ProgressPanel(id="progress-panel")
 
         yield Static("● Ready | No file selected", id="status-bar")
         yield Footer()
@@ -321,30 +288,25 @@ class SummeetsApp(App):
     def on_mount(self) -> None:
         """Initialize on app start."""
         self._log("✦ Summeets TUI initialized", "bold cyan")
-        self._log("Select a file and press [R] to run workflow", "dim")
-        self._log("Supported formats: Video (cyan) | Audio (green) | Transcript (yellow)", "dim")
+        self._log("Select input type, choose a file, and click Run Workflow", "dim")
+        self._log("Supported: Video (.mp4, .mkv) | Audio (.m4a, .mp3) | Transcript (.json, .txt)", "dim")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Event Handlers
     # ─────────────────────────────────────────────────────────────────────────
 
-    def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
-        """Handle file selection in explorer (for FilteredDirectoryTree)."""
-        self.selected_file = event.path
-        self.query_one("#file-info", FileInfo).selected_path = event.path
-        file_type = FileExplorer.get_file_type(event.path)
-        self._update_status()
-        self._log(f"Selected: [cyan]{event.path.name}[/] ({file_type})")
-        # Show preview for text files
-        self._show_file_preview(event.path)
-
-    @on(Button.Pressed, "#btn-run")
+    @on(Button.Pressed, "#btn-run-workflow")
     def on_run_pressed(self) -> None:
         """Handle Run/Cancel button click (toggle behavior)."""
         if self.is_processing:
             self.action_cancel_workflow()
         else:
             self.action_run_workflow()
+
+    @on(Button.Pressed, "#btn-browse")
+    def on_browse_pressed(self) -> None:
+        """Handle Browse button click - open file dialog."""
+        self._open_file_dialog()
 
     @on(Button.Pressed, "#btn-save-env")
     def on_save_env_pressed(self) -> None:
@@ -358,15 +320,6 @@ class SummeetsApp(App):
                 self._log(f"✗ {message}", "red")
         except (NoMatches, OSError, IOError) as e:
             self._log(f"✗ Failed to save config: {e}", "red")
-
-    @on(Button.Pressed, "#close-preview")
-    def on_close_preview(self) -> None:
-        """Close the file preview panel."""
-        try:
-            container = self.query_one("#file-preview-container")
-            container.remove_class("visible")
-        except NoMatches:
-            pass
 
     @on(Button.Pressed, "#btn-copy-log")
     def on_copy_log(self) -> None:
@@ -479,8 +432,19 @@ class SummeetsApp(App):
             self._log("⚠ Workflow already in progress", "yellow")
             return
 
-        if self.selected_file is None:
-            self._log("⚠ Please select a file first", "yellow")
+        # Get file from execution panel
+        try:
+            exec_panel = self.query_one("#execution", ExecutionPanel)
+            file_path_str = self.query_one("#file-path").value
+            if not file_path_str:
+                self._log("⚠ Please select a file first (click Browse)", "yellow")
+                return
+            self.selected_file = Path(file_path_str)
+            if not self.selected_file.exists():
+                self._log(f"⚠ File not found: {self.selected_file}", "yellow")
+                return
+        except NoMatches:
+            self._log("⚠ Execution panel not found", "red")
             return
 
         self.is_processing = True
@@ -499,10 +463,12 @@ class SummeetsApp(App):
         # Clear logs
         self.query_one("#stage-log", RichLog).clear()
 
-        file_type = FileExplorer.get_file_type(self.selected_file)
+        # Get config from execution panel
+        config = exec_panel.get_config()
+        flow_type = config.get("flow_type", "video")
         self._log("━" * 40, "dim")
         self._log(f"▶ Starting workflow for: {self.selected_file.name}", "bold cyan")
-        self._log(f"  Type: {file_type} | Provider: {self._get_provider()}", "dim")
+        self._log(f"  Flow: {flow_type} | Provider: {self._get_provider()}", "dim")
 
         # Start background worker
         self.execute_workflow()
@@ -521,42 +487,87 @@ class SummeetsApp(App):
         """Focus on config panel."""
         try:
             from textual.widgets import Select
-            self.query_one("#provider", Select).focus()
+            self.query_one("#exec-provider", Select).focus()
         except NoMatches:
             pass  # Widget not found, ignore
 
-    def action_refresh_explorer(self) -> None:
-        """Refresh the file explorer."""
+    def _open_file_dialog(self) -> None:
+        """Open native file dialog to select a file."""
+        import tkinter as tk
+        from tkinter import filedialog
+
+        # Get selected flow type for file filter
         try:
-            explorer = self.query_one("#file-explorer", FileExplorer)
-            explorer.reload()
-            self._log("File explorer refreshed", "dim")
+            exec_panel = self.query_one("#execution", ExecutionPanel)
+            flow_type = exec_panel.selected_flow
         except NoMatches:
-            pass  # Explorer widget not found
+            flow_type = "video"
+
+        # Define file type filters based on flow
+        if flow_type == "video":
+            filetypes = [
+                ("Video files", "*.mp4 *.mkv *.avi *.mov *.webm *.m4v *.wmv *.flv"),
+                ("All files", "*.*"),
+            ]
+        elif flow_type == "audio":
+            filetypes = [
+                ("Audio files", "*.m4a *.mp3 *.wav *.flac *.ogg *.mka *.webm"),
+                ("All files", "*.*"),
+            ]
+        else:  # transcript
+            filetypes = [
+                ("Transcript files", "*.json *.txt *.srt *.md"),
+                ("All files", "*.*"),
+            ]
+
+        # Create hidden root window for file dialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+
+        file_path = filedialog.askopenfilename(
+            title=f"Select {flow_type.title()} File",
+            filetypes=filetypes,
+            initialdir=str(Path.cwd() / "data")
+        )
+
+        root.destroy()
+
+        if file_path:
+            path = Path(file_path)
+            self.selected_file = path
+            try:
+                exec_panel = self.query_one("#execution", ExecutionPanel)
+                exec_panel.set_file(path)
+                self._log(f"Selected: [cyan]{path.name}[/]")
+                self._update_status()
+            except NoMatches:
+                pass
 
     # ─────────────────────────────────────────────────────────────────────────
     # Background Worker
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_workflow_config(self, file_type: str, config_values: dict):
-        """Build WorkflowConfig from file type and UI config values."""
+    def _build_workflow_config(self, flow_type: str, config_values: dict):
+        """Build WorkflowConfig from flow type and UI config values."""
         from src.workflow import WorkflowConfig
 
+        # Flow type determines which steps to run
         return WorkflowConfig(
             input_file=self.selected_file,
             output_dir=Path("data/output"),
-            extract_audio=(file_type == "video"),
-            process_audio=(file_type in ["video", "audio"]),
-            transcribe=(file_type in ["video", "audio"]),
+            extract_audio=(flow_type == "video"),
+            process_audio=(flow_type in ["video", "audio"]),
+            transcribe=(flow_type in ["video", "audio"]),
             summarize=True,
             audio_format="m4a",
             audio_quality="high",
-            normalize_audio=config_values["normalize"],
-            increase_volume=config_values["increase_volume"],
-            summary_template=config_values["template"],
-            provider=config_values["provider"],
-            model=config_values["model"],
-            auto_detect_template=config_values["auto_detect"],
+            normalize_audio=config_values.get("normalize", True),
+            increase_volume=config_values.get("increase_volume", False),
+            summary_template=config_values.get("template", "default"),
+            provider=config_values.get("provider", "openai"),
+            model=config_values.get("model", "gpt-4o-mini"),
+            auto_detect_template=config_values.get("auto_detect", True),
         )
 
     def _create_progress_callback(self, worker, stage_start_times: dict):
@@ -589,14 +600,13 @@ class SummeetsApp(App):
 
         try:
             from src.workflow import execute_workflow as run_workflow
-            from src.utils.validation import detect_file_type
 
-            config_values = self.query_one("#config", ConfigPanel).get_config()
-            file_type = detect_file_type(self.selected_file)
+            config_values = self.query_one("#execution", ExecutionPanel).get_config()
+            flow_type = config_values.get("flow_type", "video")
 
-            self.post_message(LogMessage(f"Detected file type: {file_type}", "dim"))
+            self.post_message(LogMessage(f"Flow type: {flow_type}", "dim"))
 
-            config = self._build_workflow_config(file_type, config_values)
+            config = self._build_workflow_config(flow_type, config_values)
             stage_start_times = {}
             progress_callback = self._create_progress_callback(worker, stage_start_times)
 
@@ -633,14 +643,14 @@ class SummeetsApp(App):
     def _toggle_buttons(self, processing: bool) -> None:
         """Toggle button states during processing."""
         try:
-            self.query_one("#config", ConfigPanel).set_processing(processing)
+            self.query_one("#execution", ExecutionPanel).set_processing(processing)
         except NoMatches:
-            pass  # Config panel not found
+            pass  # Execution panel not found
 
     def _get_provider(self) -> str:
         """Get current provider/model string."""
         try:
-            config = self.query_one("#config", ConfigPanel).get_config()
+            config = self.query_one("#execution", ExecutionPanel).get_config()
             return f"{config['provider']}/{config['model']}"
         except (NoMatches, KeyError):
             return "openai/gpt-4o-mini"
@@ -657,8 +667,13 @@ class SummeetsApp(App):
                 parts.append("[#22c55e]● Ready[/]")
 
             if self.selected_file:
-                file_type = FileExplorer.get_file_type(self.selected_file)
-                parts.append(f"[white]{self.selected_file.name}[/] ({file_type})")
+                # Get flow type from execution panel
+                try:
+                    exec_panel = self.query_one("#execution", ExecutionPanel)
+                    flow_type = exec_panel.selected_flow
+                except NoMatches:
+                    flow_type = "unknown"
+                parts.append(f"[white]{self.selected_file.name}[/] ({flow_type})")
             else:
                 parts.append("[dim]No file selected[/]")
 
@@ -677,36 +692,6 @@ class SummeetsApp(App):
                 self._log(f"Summary loaded: {summary_path.name}", "green")
         except Exception as e:
             self._log(f"Failed to load summary: {e}", "red")
-
-    def _show_file_preview(self, file_path: Path) -> None:
-        """Show file content in the preview panel."""
-        ext = file_path.suffix.lower()
-        if ext not in TEXT_EXTENSIONS:
-            return
-
-        try:
-            content = file_path.read_text(encoding="utf-8")
-            self._display_preview(file_path.name, content, ext)
-            self._log(f"Preview: {file_path.name}", "dim")
-        except Exception as e:
-            self._log(f"Failed to preview file: {e}", "red")
-
-    def _display_preview(self, filename: str, content: str, ext: str) -> None:
-        """Display content in preview panel with syntax highlighting."""
-        container = self.query_one("#file-preview-container")
-        container.add_class("visible")
-
-        self.query_one("#preview-title", Static).update(f"◆ {filename}")
-
-        preview_log = self.query_one("#file-preview", RichLog)
-        preview_log.clear()
-
-        style = SYNTAX_STYLES.get(ext, "")
-        if style:
-            preview_log.write(Text(content, style=style))
-        else:
-            preview_log.write(content)
-
 
 # =============================================================================
 # ENTRY POINT

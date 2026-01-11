@@ -16,7 +16,9 @@ from src.utils.validation import (
     sanitize_path_input, validate_transcript_file, validate_output_dir,
     validate_model_name, detect_file_type, validate_llm_provider, validate_summary_template
 )
-from src.utils.exceptions import ValidationError
+from src.utils.exceptions import ValidationError, ConfigurationError
+from src.utils.startup import check_startup_requirements
+from src.utils.shutdown import install_signal_handlers
 from src.workflow import WorkflowConfig, execute_workflow
 
 app = typer.Typer(add_completion=False, help="Summeets - Transcribe and summarize meetings")
@@ -27,8 +29,10 @@ def _init(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
     log_file: bool = typer.Option(True, "--log-file/--no-log-file", help="Write logs to file")
 ) -> None:
-    """Initialize logging for all commands."""
+    """Initialize logging and signal handlers for all commands."""
     setup_logging(logging.DEBUG if verbose else logging.INFO, log_file=log_file)
+    # Install signal handlers for graceful shutdown
+    install_signal_handlers()
 
 
 @app.command("transcribe")
@@ -38,6 +42,16 @@ def cmd_transcribe(
 ) -> None:
     """Transcribe video/audio using Whisper + diarization."""
     try:
+        # Validate API keys on startup
+        try:
+            check_startup_requirements(require_transcription=True)
+        except ConfigurationError as e:
+            console.print(f"[red]Configuration Error: {e.message}[/red]")
+            if e.details and 'errors' in e.details:
+                for err in e.details['errors']:
+                    console.print(f"  [dim]- {err}[/dim]")
+            raise typer.Exit(1)
+
         # Input validation
         if not input_file:
             input_file_str = typer.prompt("Enter video or audio file path")
@@ -133,6 +147,16 @@ def cmd_summarize(
 ) -> None:
     """Summarize meeting transcript using LLM."""
     try:
+        # Validate API keys on startup
+        try:
+            check_startup_requirements(require_summarization=True, provider=provider)
+        except ConfigurationError as e:
+            console.print(f"[red]Configuration Error: {e.message}[/red]")
+            if e.details and 'errors' in e.details:
+                for err in e.details['errors']:
+                    console.print(f"  [dim]- {err}[/dim]")
+            raise typer.Exit(1)
+
         # Input validation
         transcript_str = sanitize_path_input(str(transcript))
         transcript = Path(transcript_str)
@@ -221,6 +245,20 @@ def cmd_process(
     console.print("[bold]Starting complete processing pipeline[/bold]")
 
     try:
+        # Validate API keys on startup (need both transcription and summarization)
+        try:
+            check_startup_requirements(
+                require_transcription=True,
+                require_summarization=True,
+                provider=provider
+            )
+        except ConfigurationError as e:
+            console.print(f"[red]Configuration Error: {e.message}[/red]")
+            if e.details and 'errors' in e.details:
+                for err in e.details['errors']:
+                    console.print(f"  [dim]- {err}[/dim]")
+            raise typer.Exit(1)
+
         # Input validation
         if not input_file:
             input_file_str = typer.prompt("Enter video, audio, or transcript file path")
@@ -302,9 +340,9 @@ def cmd_config() -> None:
     table = Table(title="Summeets Configuration")
     table.add_column("Setting", style="cyan")
     table.add_column("Value", style="yellow")
-    
+
     config = get_configuration_summary()
-    
+
     # Add configuration rows in a logical order
     table.add_row("Provider", config['provider'])
     table.add_row("Model", config['model'])
@@ -320,8 +358,111 @@ def cmd_config() -> None:
     table.add_row("OpenAI API Key", config['openai_api_key'])
     table.add_row("Anthropic API Key", config['anthropic_api_key'])
     table.add_row("Replicate Token", config['replicate_api_token'])
-    
+
     console.print(table)
+
+
+@app.command("health")
+def cmd_health() -> None:
+    """Check system health and configuration status."""
+    from src.utils.startup import (
+        validate_ffmpeg_availability,
+        validate_disk_space,
+        validate_openai_api_key,
+        validate_anthropic_api_key,
+        validate_replicate_api_token,
+        ValidationLevel
+    )
+
+    console.print("[bold]Summeets Health Check[/bold]\n")
+
+    all_passed = True
+
+    # Check FFmpeg
+    ffmpeg_result = validate_ffmpeg_availability()
+    if ffmpeg_result.passed:
+        console.print("[green]OK[/green] FFmpeg available")
+        if ffmpeg_result.details:
+            console.print(f"    [dim]ffmpeg: {ffmpeg_result.details.get('ffmpeg_path', 'N/A')}[/dim]")
+            console.print(f"    [dim]ffprobe: {ffmpeg_result.details.get('ffprobe_path', 'N/A')}[/dim]")
+    else:
+        icon = "[yellow]WARN[/yellow]" if ffmpeg_result.level == ValidationLevel.WARN else "[red]FAIL[/red]"
+        console.print(f"{icon} {ffmpeg_result.message}")
+        if ffmpeg_result.level == ValidationLevel.ERROR:
+            all_passed = False
+
+    # Check disk space
+    disk_result = validate_disk_space(min_gb=1.0)
+    if disk_result.passed:
+        free_gb = disk_result.details.get('free_gb', 0) if disk_result.details else 0
+        console.print(f"[green]OK[/green] Disk space: {free_gb:.1f}GB available")
+    else:
+        console.print(f"[yellow]WARN[/yellow] {disk_result.message}")
+
+    # Check API keys
+    console.print("\n[bold]API Keys:[/bold]")
+
+    # OpenAI
+    openai_result = validate_openai_api_key(SETTINGS.openai_api_key)
+    if openai_result.passed:
+        console.print("[green]OK[/green] OpenAI API key configured")
+    elif openai_result.level == ValidationLevel.WARN:
+        console.print("[yellow]--[/yellow] OpenAI API key not configured")
+    else:
+        console.print(f"[red]FAIL[/red] {openai_result.message}")
+        all_passed = False
+
+    # Anthropic
+    anthropic_result = validate_anthropic_api_key(SETTINGS.anthropic_api_key)
+    if anthropic_result.passed:
+        console.print("[green]OK[/green] Anthropic API key configured")
+    elif anthropic_result.level == ValidationLevel.WARN:
+        console.print("[yellow]--[/yellow] Anthropic API key not configured")
+    else:
+        console.print(f"[red]FAIL[/red] {anthropic_result.message}")
+        all_passed = False
+
+    # Replicate
+    replicate_result = validate_replicate_api_token(SETTINGS.replicate_api_token)
+    if replicate_result.passed:
+        console.print("[green]OK[/green] Replicate API token configured")
+    elif replicate_result.level == ValidationLevel.WARN:
+        console.print("[yellow]--[/yellow] Replicate API token not configured")
+    else:
+        console.print(f"[red]FAIL[/red] {replicate_result.message}")
+        all_passed = False
+
+    # Check capabilities
+    console.print("\n[bold]Capabilities:[/bold]")
+
+    can_transcribe = replicate_result.passed
+    can_summarize_openai = openai_result.passed
+    can_summarize_anthropic = anthropic_result.passed
+
+    if can_transcribe:
+        console.print("[green]OK[/green] Transcription available (Replicate)")
+    else:
+        console.print("[yellow]--[/yellow] Transcription unavailable (need Replicate token)")
+
+    if can_summarize_openai:
+        console.print("[green]OK[/green] Summarization available (OpenAI)")
+    else:
+        console.print("[yellow]--[/yellow] OpenAI summarization unavailable")
+
+    if can_summarize_anthropic:
+        console.print("[green]OK[/green] Summarization available (Anthropic)")
+    else:
+        console.print("[yellow]--[/yellow] Anthropic summarization unavailable")
+
+    # Summary
+    console.print()
+    if all_passed and (can_summarize_openai or can_summarize_anthropic):
+        console.print("[bold green]System is healthy and ready to process meetings.[/bold green]")
+    elif all_passed:
+        console.print("[bold yellow]System is functional but missing API keys for some operations.[/bold yellow]")
+    else:
+        console.print("[bold red]System has configuration issues that need to be resolved.[/bold red]")
+        raise typer.Exit(1)
 
 @app.command("tui")
 def cmd_tui() -> None:
@@ -332,6 +473,135 @@ def cmd_tui() -> None:
     except Exception as e:
         console.print(f"[red]Failed to launch TUI: {e}[/red]")
         raise typer.Exit(1)
+
+@app.command("migrate-data")
+def cmd_migrate_data(
+    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show what would be migrated without making changes"),
+    move: bool = typer.Option(False, "--move", "-m", help="Move files instead of copying"),
+    legacy_input: Path = typer.Option(Path("input"), "--legacy-input", help="Legacy input directory"),
+    legacy_output: Path = typer.Option(Path("out"), "--legacy-output", help="Legacy output directory"),
+    target_dir: Path = typer.Option(Path("data"), "--target", "-t", help="Target data directory")
+) -> None:
+    """Migrate from legacy to new data directory structure."""
+    from src.utils.migration import migrate_to_new_structure, cleanup_legacy_directories
+
+    if dry_run:
+        console.print("[yellow]DRY RUN - No files will be modified[/yellow]\n")
+
+    console.print("[bold]Migrating data structure...[/bold]")
+    console.print(f"  Legacy input: {legacy_input}")
+    console.print(f"  Legacy output: {legacy_output}")
+    console.print(f"  Target: {target_dir}\n")
+
+    result = migrate_to_new_structure(
+        legacy_input=legacy_input,
+        legacy_output=legacy_output,
+        new_base=target_dir,
+        dry_run=dry_run,
+        move=move
+    )
+
+    # Display results
+    console.print(f"\n[green]✓ Migrated:[/green] {result.success_count} files")
+    console.print(f"[yellow]⊘ Skipped:[/yellow] {result.skip_count} files")
+    console.print(f"[red]✗ Errors:[/red] {result.error_count} files")
+
+    if result.migrated and not dry_run:
+        console.print("\n[dim]Migrated files:[/dim]")
+        for item in result.migrated[:10]:  # Show first 10
+            console.print(f"  {item['source']} -> {item['target']}")
+        if len(result.migrated) > 10:
+            console.print(f"  ... and {len(result.migrated) - 10} more")
+
+    if result.errors:
+        console.print("\n[red]Errors:[/red]")
+        for error in result.errors:
+            console.print(f"  {error['file']}: {error['error']}")
+
+    # Cleanup empty directories
+    if not dry_run and result.success_count > 0:
+        cleanup = cleanup_legacy_directories(legacy_input, legacy_output, dry_run=False)
+        if cleanup.get("input_removed"):
+            console.print(f"\n[dim]Removed empty legacy directory: {legacy_input}[/dim]")
+        if cleanup.get("output_removed"):
+            console.print(f"[dim]Removed empty legacy directory: {legacy_output}[/dim]")
+
+
+@app.command("jobs")
+def cmd_jobs(
+    limit: int = typer.Option(10, "--limit", "-l", help="Number of jobs to show"),
+    status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output")
+) -> None:
+    """List recent processing jobs."""
+    from src.utils.job_history import get_job_store
+
+    store = get_job_store()
+    jobs = store.list_jobs(limit=limit, status=status)
+
+    if not jobs:
+        console.print("[yellow]No jobs found[/yellow]")
+        return
+
+    table = Table(title=f"Recent Jobs (showing {len(jobs)} of {limit})")
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Status", style="white")
+    table.add_column("Type", style="dim")
+    table.add_column("Input File", style="white", max_width=40)
+    table.add_column("Started", style="dim")
+
+    for job in jobs:
+        job_id = job.get('job_id', 'unknown')[:8]
+        job_status = job.get('status', 'unknown')
+        job_type = job.get('job_type', '-')
+        input_file = job.get('input_file', '-')
+        if len(input_file) > 40:
+            input_file = "..." + input_file[-37:]
+        started = job.get('started_at', job.get('created_at', '-'))
+        if started and len(started) > 16:
+            started = started[:16]
+
+        # Color status
+        if job_status == 'completed':
+            status_display = f"[green]{job_status}[/green]"
+        elif job_status == 'failed':
+            status_display = f"[red]{job_status}[/red]"
+        elif job_status == 'started':
+            status_display = f"[yellow]{job_status}[/yellow]"
+        else:
+            status_display = job_status
+
+        table.add_row(job_id, status_display, job_type, input_file, started)
+
+    console.print(table)
+
+    if verbose:
+        stats = store.get_stats()
+        console.print(f"\n[dim]Total jobs: {stats['total']}[/dim]")
+        for s, count in stats.get('by_status', {}).items():
+            console.print(f"[dim]  {s}: {count}[/dim]")
+
+
+@app.command("job-cleanup")
+def cmd_job_cleanup(
+    days: int = typer.Option(30, "--days", "-d", help="Remove jobs older than N days"),
+    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show what would be removed")
+) -> None:
+    """Clean up old job history files."""
+    from src.utils.job_history import get_job_store
+
+    store = get_job_store()
+
+    if dry_run:
+        # Count files that would be removed
+        from datetime import datetime
+        cutoff = datetime.now().timestamp() - (days * 86400)
+        count = sum(1 for f in store.storage_path.glob("*.json") if f.stat().st_mtime < cutoff)
+        console.print(f"[yellow]DRY RUN: Would remove {count} job files older than {days} days[/yellow]")
+    else:
+        removed = store.cleanup_old_jobs(days=days)
+        console.print(f"[green]✓ Removed {removed} old job files[/green]")
+
 
 def main() -> None:
     app()

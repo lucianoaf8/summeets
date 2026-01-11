@@ -32,6 +32,7 @@ SUSPICIOUS_PATTERNS = [
 
 MAX_PATH_LENGTH = 260  # Windows MAX_PATH limit
 MAX_FILENAME_LENGTH = 255
+MAX_FILE_SIZE_MB = 500  # Default maximum file size in MB
 SUPPORTED_AUDIO_EXTENSIONS = {'.m4a', '.mka', '.ogg', '.mp3', '.wav', '.webm', '.flac'}
 SUPPORTED_VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v'}
 SUPPORTED_TRANSCRIPT_EXTENSIONS = {'.json', '.txt', '.srt'}
@@ -42,7 +43,8 @@ __all__ = ['ValidationError', 'validate_safe_path', 'sanitize_path_input', 'vali
            'validate_positive_number', 'validate_integer_range', 'validate_transcript_file',
            'validate_output_dir', 'validate_model_name', 'validate_video_path',
            'validate_transcript_path', 'detect_file_type', 'validate_workflow_input',
-           'validate_llm_provider', 'validate_summary_template', 'VALID_PROVIDERS', 'VALID_TEMPLATES']
+           'validate_llm_provider', 'validate_summary_template', 'validate_file_size',
+           'VALID_PROVIDERS', 'VALID_TEMPLATES', 'MAX_FILE_SIZE_MB']
 
 # Valid providers and templates (single source of truth)
 VALID_PROVIDERS = frozenset({'openai', 'anthropic'})
@@ -643,5 +645,74 @@ def validate_workflow_input(path: Union[str, Path]) -> tuple[Path, str]:
         validate_audio_path(path)
     elif file_type == 'transcript':
         validate_transcript_path(path)
-    
+
     return path, file_type
+
+
+def validate_file_size(
+    path: Union[str, Path],
+    max_size_mb: float = MAX_FILE_SIZE_MB,
+    file_type: Optional[str] = None
+) -> Path:
+    """
+    Validate that a file does not exceed the maximum allowed size.
+
+    Args:
+        path: Path to the file to validate
+        max_size_mb: Maximum allowed size in megabytes (default: 500MB)
+        file_type: Optional file type for context in error messages
+
+    Returns:
+        Validated Path object
+
+    Raises:
+        ValidationError: If file exceeds maximum size
+        FileNotFoundError: If file doesn't exist
+    """
+    if isinstance(path, str):
+        path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"File does not exist: {path}")
+
+    if not path.is_file():
+        raise ValidationError(f"Path is not a file: {path}")
+
+    file_size_bytes = path.stat().st_size
+    file_size_mb = file_size_bytes / (1024 * 1024)
+
+    if file_size_mb > max_size_mb:
+        type_context = f" {file_type}" if file_type else ""
+        raise ValidationError(
+            f"File{type_context} exceeds maximum size: {file_size_mb:.1f}MB > {max_size_mb}MB limit. "
+            f"Consider using a smaller file or splitting the content."
+        )
+
+    log.debug(f"File size validation passed: {file_size_mb:.1f}MB <= {max_size_mb}MB")
+    return path
+
+
+def validate_workflow_input_with_size(
+    path: Union[str, Path],
+    max_size_mb: float = MAX_FILE_SIZE_MB
+) -> tuple[Path, str]:
+    """
+    Validate input file including size check.
+
+    Args:
+        path: Path to input file
+        max_size_mb: Maximum allowed file size in MB
+
+    Returns:
+        Tuple of (validated_path, file_type)
+
+    Raises:
+        ValidationError: If file is invalid, unsupported, or too large
+    """
+    # First validate the file normally
+    validated_path, file_type = validate_workflow_input(path)
+
+    # Then check file size
+    validate_file_size(validated_path, max_size_mb, file_type)
+
+    return validated_path, file_type

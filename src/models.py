@@ -1,9 +1,11 @@
-"""Data models for summeets transcription and summarization."""
-from dataclasses import dataclass, field
+"""Data models for summeets transcription and summarization.
+
+All models use Pydantic for consistent validation and serialization.
+"""
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any, Union, Callable
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, ConfigDict
@@ -61,28 +63,19 @@ class SummaryTemplate(str, Enum):
     REQUIREMENTS = "requirements"
 
 
-@dataclass
-class Word:
+class Word(BaseModel):
     """Individual word with timing information."""
     start: float
     end: float
     text: str
     confidence: Optional[float] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        result = {
-            "start": self.start,
-            "end": self.end,
-            "text": self.text
-        }
-        if self.confidence is not None:
-            result["confidence"] = self.confidence
-        return result
+        """Convert to dictionary (legacy compatibility)."""
+        return self.model_dump(exclude_none=True)
 
 
-@dataclass
-class Segment:
+class Segment(BaseModel):
     """Text segment with speaker attribution and word-level timing."""
     start: float
     end: float
@@ -90,19 +83,13 @@ class Segment:
     speaker: Optional[str] = None
     words: Optional[List[Word]] = None
     confidence: Optional[float] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        result = {
-            "start": self.start,
-            "end": self.end,
-            "text": self.text,
-            "speaker": self.speaker,
-            "words": [w.to_dict() for w in (self.words or [])]
-        }
-        if self.confidence is not None:
-            result["confidence"] = self.confidence
-        return result
+        """Convert to dictionary (legacy compatibility)."""
+        data = self.model_dump(exclude_none=True)
+        if self.words:
+            data["words"] = [w.to_dict() for w in self.words]
+        return data
 
 
 class AudioMetadata(BaseModel):
@@ -268,21 +255,42 @@ class JobManager(BaseModel):
                 self.failed_jobs.remove(job_id)
 
 
-@dataclass
-class TranscriptData:
+class TranscriptData(BaseModel):
     """Complete transcript data with segments and metadata."""
-    segments: List[Segment]
-    duration: float
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    segments: List[Segment] = Field(default_factory=list)
+    duration: float = 0.0
     output_file: Optional[Path] = None
     metadata: Optional[Dict[str, Any]] = None
 
 
-@dataclass 
-class SummaryData:
+class SummaryData(BaseModel):
     """Summary data with content and metadata."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     content: str
     output_file: Optional[Path] = None
     metadata: Optional[Dict[str, Any]] = None
     chunk_summaries: Optional[List[str]] = None
+
+
+class WorkflowStep(BaseModel):
+    """Represents a single workflow step."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    name: str
+    enabled: bool
+    function: Callable[[Dict[str, Any]], Dict[str, Any]]
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    required_input_type: Optional[str] = None
+
+    def can_execute(self, file_type: str) -> bool:
+        """Check if this step can execute for the given file type."""
+        if not self.enabled:
+            return False
+        if self.required_input_type and self.required_input_type != file_type:
+            return False
+        return True
 
 

@@ -548,8 +548,8 @@ Integration tests reference fixtures that don't exist: `transcript_files`, `long
    ```
 
 **Success Criteria:**
-- [ ] All integration test fixtures created
-- [ ] Mock paths match actual implementation
+- [x] All integration test fixtures created (existing in transcript_samples.py)
+- [x] Mock paths match actual implementation
 - [ ] `pytest tests/integration/ --run-integration` passes
 
 ---
@@ -586,7 +586,7 @@ Integration tests reference fixtures that don't exist: `transcript_files`, `long
    ```
 
 **Success Criteria:**
-- [ ] All mock decorators reference actual functions
+- [x] All mock decorators reference actual functions
 - [ ] Integration tests pass
 - [ ] CI validates mock paths exist
 
@@ -748,8 +748,8 @@ Direct imports create tight coupling, making testing difficult and preventing im
    ```
 
 **Success Criteria:**
-- [ ] Service interfaces defined
-- [ ] ServiceContainer implemented
+- [x] Service interfaces defined (src/services/interfaces.py)
+- [x] ServiceContainer implemented (src/services/container.py)
 - [ ] WorkflowEngine accepts injected dependencies
 - [ ] All existing tests pass
 - [ ] New tests demonstrate mockability
@@ -836,9 +836,9 @@ Module-level globals (`_data_manager`, `_client`, `_last_api_key`) create testin
    - Ensure tests don't share state
 
 **Success Criteria:**
-- [ ] Provider clients support instance-based usage
+- [x] Provider clients support instance-based usage (OpenAIProvider/AnthropicProvider via LLMProvider)
 - [ ] DataManager uses factory pattern
-- [ ] Tests can reset global state
+- [x] Tests can reset global state (reset_client() and ProviderRegistry.reset())
 - [ ] No cross-test contamination
 
 ---
@@ -1270,9 +1270,9 @@ User input prompts mixed with core transcription logic.
    Ensure all calls use list form, not shell=True.
 
 **Success Criteria:**
-- [ ] All FFmpeg calls use list-based subprocess
-- [ ] Input paths validated before use
-- [ ] No shell=True in any subprocess call
+- [x] All FFmpeg calls use list-based subprocess
+- [x] Input paths validated before use
+- [x] No shell=True in any subprocess call
 
 ---
 
@@ -1657,8 +1657,8 @@ Default filter allows all media files, should be more restrictive.
    ```
 
 **Success Criteria:**
-- [ ] No imports from config_manager
-- [ ] File deleted
+- [x] No imports from config_manager
+- [x] File deleted
 - [ ] All tests pass
 
 ---
@@ -1739,10 +1739,10 @@ Default filter allows all media files, should be more restrictive.
    ```
 
 **Success Criteria:**
-- [ ] Prompt injection patterns detected and removed
-- [ ] Special LLM tokens escaped
-- [ ] Tests cover known injection patterns
-- [ ] Integrated with summarization pipeline
+- [x] Prompt injection patterns detected and removed
+- [x] Special LLM tokens escaped
+- [x] Tests cover known injection patterns
+- [x] Integrated with summarization pipeline (legacy_prompts.py:format_chunk_text)
 
 ---
 
@@ -1801,13 +1801,13 @@ Default filter allows all media files, should be more restrictive.
 
 ### Phase 1 Completion Gate
 - [ ] All CRITICAL security issues resolved
-- [ ] All HIGH security issues resolved (Electron)
+- [ ] All HIGH security issues resolved (Electron) - SKIPPED (Electron removed)
 - [ ] Integration tests passing
-- [ ] No security vulnerabilities in Electron app
-- [ ] Test fixtures complete
+- [ ] No security vulnerabilities in Electron app - SKIPPED (Electron removed)
+- [x] Test fixtures complete (existing in transcript_samples.py)
 
 ### Phase 2 Completion Gate
-- [ ] Dependency injection implemented
+- [x] Dependency injection implemented (src/services/)
 - [ ] Global singletons eliminated
 - [ ] Data structure migration available
 - [ ] Workflow engine refactored
@@ -1820,8 +1820,8 @@ Default filter allows all media files, should be more restrictive.
 - [ ] All models using Pydantic
 
 ### Phase 4 Completion Gate
-- [ ] Deprecated code removed
-- [ ] Prompt injection protection added
+- [x] Deprecated code removed (config_manager.py)
+- [x] Prompt injection protection added (src/utils/sanitization.py)
 - [ ] Large file handling improved
 - [ ] Security audit passing
 
@@ -1874,32 +1874,37 @@ Default filter allows all media files, should be more restrictive.
 ## Appendix: File Change Summary
 
 ### Files to Create
-- `archive/electron_gui/tests/path-validation.test.js`
-- `tests/integration/conftest.py`
-- `src/services/interfaces.py`
-- `src/services/container.py`
+- `archive/electron_gui/tests/path-validation.test.js` - SKIPPED (Electron removed)
+- `tests/integration/conftest.py` - EXISTS (fixtures in transcript_samples.py)
+- `src/services/interfaces.py` ✅ CREATED
+- `src/services/container.py` ✅ CREATED
+- `src/services/implementations.py` ✅ CREATED (bonus)
 - `src/utils/migration.py`
 - `src/utils/job_history.py`
-- `src/utils/sanitization.py`
+- `src/utils/sanitization.py` ✅ CREATED
+- `tests/unit/test_sanitization.py` ✅ CREATED
 - `src/summarize/loader.py`
 - `src/summarize/chunking.py`
 - `src/summarize/strategies.py`
 - `src/summarize/refiners.py`
 
 ### Files to Modify
-- `archive/electron_gui/main.js` (security hardening)
+- `archive/electron_gui/main.js` (security hardening) - SKIPPED (Electron removed)
 - `src/workflow.py` (DI refactor)
-- `src/providers/openai_client.py` (instance-based)
-- `src/providers/anthropic_client.py` (instance-based)
-- `src/providers/base.py` (common base class)
+- `src/providers/openai_client.py` (instance-based) - ALREADY DONE (OpenAIProvider class)
+- `src/providers/anthropic_client.py` (instance-based) - ALREADY DONE (AnthropicProvider class)
+- `src/providers/base.py` (common base class) - ALREADY DONE (LLMProvider + ProviderRegistry)
 - `src/utils/fsio.py` (factory pattern)
 - `src/models.py` (Pydantic migration)
 - `src/summarize/pipeline.py` (modularization)
+- `src/summarize/legacy_prompts.py` ✅ MODIFIED (sanitization integration)
 - `cli/app.py` (new commands)
-- `tests/integration/test_summarization_pipeline.py` (fix mocks)
+- `tests/integration/test_summarization_pipeline.py` ✅ MODIFIED (fix mocks)
+- `tests/performance/test_performance.py` ✅ MODIFIED (fix mocks)
 
 ### Files to Delete
-- `src/utils/config_manager.py`
+- `src/utils/config_manager.py` ✅ DELETED
+- `tests/unit/test_config_manager.py` ✅ DELETED
 
 ---
 

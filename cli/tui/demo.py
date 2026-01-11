@@ -2,22 +2,21 @@
 Summeets TUI Demo - Visual Design Showcase
 
 This demo displays the full TUI layout with simulated workflow execution.
-Run with: python demo.py
+Run with: python -m cli.tui.demo
 
 Features demonstrated:
 - Futuristic dark theme with cyan/violet accents
-- 3-panel layout (File Browser | Pipeline | Config/Preview)
+- 2-panel layout (Config/Logs | Execution/Pipeline)
+- Flow type selection (Video/Audio/Transcript)
 - Animated pipeline stage transitions
 - Real-time progress updates (no flickering)
-- File type color coding
-- Responsive status bar
+- Simulated file selection and workflow
 """
 from __future__ import annotations
 
-import asyncio
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
 
 from rich.text import Text
 from textual import on, work
@@ -30,7 +29,6 @@ from textual.widgets import (
     Button,
     Checkbox,
     Collapsible,
-    DirectoryTree,
     Footer,
     Header,
     Input,
@@ -38,7 +36,6 @@ from textual.widgets import (
     Markdown,
     ProgressBar,
     RichLog,
-    Rule,
     Select,
     Static,
     TabbedContent,
@@ -53,10 +50,10 @@ from textual.worker import get_current_worker
 
 class StageUpdate(Message):
     """Update a pipeline stage status."""
-    def __init__(self, stage_id: str, status: str, progress: float = 0) -> None:
+    def __init__(self, stage_id: str, status: str, elapsed: str = "") -> None:
         self.stage_id = stage_id
         self.status = status
-        self.progress = progress
+        self.elapsed = elapsed
         super().__init__()
 
 
@@ -88,10 +85,7 @@ class WorkflowDone(Message):
 # =============================================================================
 
 class StageIndicator(Static):
-    """
-    Pipeline stage indicator with animated status transitions.
-    Uses CSS classes for state - prevents flickering.
-    """
+    """Pipeline stage indicator with animated status transitions."""
 
     DEFAULT_CSS = """
     StageIndicator {
@@ -114,27 +108,14 @@ class StageIndicator(Static):
         background: #1e3a5f;
     }
 
-    StageIndicator.stage--active .stage-icon {
-        color: #38bdf8;
-        text-style: bold blink;
-    }
-
     StageIndicator.stage--complete {
         border: solid #22c55e;
         background: #14532d40;
     }
 
-    StageIndicator.stage--complete .stage-icon {
-        color: #22c55e;
-    }
-
     StageIndicator.stage--error {
         border: solid #ef4444;
         background: #7f1d1d40;
-    }
-
-    StageIndicator.stage--error .stage-icon {
-        color: #ef4444;
     }
 
     StageIndicator .stage-name {
@@ -161,7 +142,7 @@ class StageIndicator(Static):
     status: reactive[str] = reactive("pending")
     elapsed: reactive[str] = reactive("")
 
-    def __init__(self, name: str, icon: str = "○", **kwargs) -> None:
+    def __init__(self, name: str, icon: str = "O", **kwargs) -> None:
         super().__init__(**kwargs)
         self.stage_name = name
         self.icon = icon
@@ -174,32 +155,30 @@ class StageIndicator(Static):
 
     def _get_status_display(self) -> str:
         icons = {
-            "pending": "○  ─ ─",
-            "active": "◉  ▶▶▶",
-            "complete": "●  ✓ ✓",
-            "error": "◉  ✗ ✗",
+            "pending": "o  - -",
+            "active": "O  >>>",
+            "complete": "*  OK!",
+            "error": "X  ERR",
         }
-        return icons.get(self.status, "○  ─ ─")
+        return icons.get(self.status, "o  - -")
 
     def watch_status(self, old: str, new: str) -> None:
         self.remove_class(f"stage--{old}")
         self.add_class(f"stage--{new}")
-        # Only update if widget is mounted (compose has run)
         try:
-            icon = self.query_one("#icon", Static)
-            icon.update(self._get_status_display())
+            self.query_one("#icon", Static).update(self._get_status_display())
         except Exception:
-            pass  # Widget not yet composed
+            pass
 
     def watch_elapsed(self, elapsed: str) -> None:
         try:
             self.query_one("#time", Static).update(elapsed)
         except Exception:
-            pass  # Widget not yet composed
+            pass
 
 
 # =============================================================================
-# PIPELINE STATUS CONTAINER
+# PIPELINE STATUS
 # =============================================================================
 
 class PipelineStatus(Container):
@@ -233,22 +212,18 @@ class PipelineStatus(Container):
         height: 5;
         content-align: center middle;
     }
-
-    PipelineStatus .connector-active {
-        color: #38bdf8;
-    }
     """
 
     def compose(self) -> ComposeResult:
-        yield Static("━━━  PROCESSING PIPELINE  ━━━", classes="pipeline-title")
+        yield Static("--- PROCESSING PIPELINE ---", classes="pipeline-title")
         with Horizontal(classes="pipeline-flow"):
-            yield StageIndicator("Extract", "🎬", id="stage-extract")
-            yield Static("━━▶", classes="connector", id="conn-1")
-            yield StageIndicator("Process", "🔊", id="stage-process")
-            yield Static("━━▶", classes="connector", id="conn-2")
-            yield StageIndicator("Transcribe", "📝", id="stage-transcribe")
-            yield Static("━━▶", classes="connector", id="conn-3")
-            yield StageIndicator("Summarize", "📋", id="stage-summarize")
+            yield StageIndicator("Extract", id="stage-extract")
+            yield Static("==>", classes="connector")
+            yield StageIndicator("Process", id="stage-process")
+            yield Static("==>", classes="connector")
+            yield StageIndicator("Transcribe", id="stage-transcribe")
+            yield Static("==>", classes="connector")
+            yield StageIndicator("Summarize", id="stage-summarize")
 
     def update_stage(self, stage_id: str, status: str, elapsed: str = "") -> None:
         stage_map = {
@@ -258,10 +233,13 @@ class PipelineStatus(Container):
             "summarize": "#stage-summarize",
         }
         if stage_id in stage_map:
-            indicator = self.query_one(stage_map[stage_id], StageIndicator)
-            indicator.status = status
-            if elapsed:
-                indicator.elapsed = elapsed
+            try:
+                indicator = self.query_one(stage_map[stage_id], StageIndicator)
+                indicator.status = status
+                if elapsed:
+                    indicator.elapsed = elapsed
+            except Exception:
+                pass
 
     def reset(self) -> None:
         for indicator in self.query(StageIndicator):
@@ -270,246 +248,11 @@ class PipelineStatus(Container):
 
 
 # =============================================================================
-# FILE EXPLORER
-# =============================================================================
-
-class FileExplorer(DirectoryTree):
-    """Color-coded file browser for supported formats."""
-
-    VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
-    AUDIO_EXT = {".m4a", ".flac", ".wav", ".mp3", ".ogg"}
-    TRANSCRIPT_EXT = {".json", ".txt", ".srt"}
-
-    DEFAULT_CSS = """
-    FileExplorer {
-        height: 1fr;
-        scrollbar-color: #38bdf8;
-        scrollbar-background: #1e293b;
-        background: #0f172a;
-    }
-    """
-
-    def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
-        supported = self.VIDEO_EXT | self.AUDIO_EXT | self.TRANSCRIPT_EXT
-        return [p for p in paths if p.is_dir() or p.suffix.lower() in supported]
-
-    def render_label(self, node, base_style, style) -> Text:
-        label = super().render_label(node, base_style, style)
-        if node.data and hasattr(node.data, 'path') and node.data.path.is_file():
-            ext = node.data.path.suffix.lower()
-            if ext in self.VIDEO_EXT:
-                label.stylize("bold #38bdf8")  # Cyan for video
-            elif ext in self.AUDIO_EXT:
-                label.stylize("bold #22c55e")  # Green for audio
-            elif ext in self.TRANSCRIPT_EXT:
-                label.stylize("bold #fbbf24")  # Yellow for transcript
-        return label
-
-
-# =============================================================================
-# FILE INFO PANEL
-# =============================================================================
-
-class FileInfo(Static):
-    """Display selected file metadata."""
-
-    DEFAULT_CSS = """
-    FileInfo {
-        height: auto;
-        min-height: 8;
-        padding: 1;
-        background: #1e293b;
-        border: solid #334155;
-        margin: 1;
-    }
-
-    FileInfo .info-title {
-        text-style: bold;
-        color: #818cf8;
-        margin-bottom: 1;
-    }
-
-    FileInfo .info-row {
-        height: auto;
-    }
-
-    FileInfo .info-label {
-        color: #64748b;
-        width: 10;
-    }
-
-    FileInfo .info-value {
-        color: #e2e8f0;
-    }
-    """
-
-    selected_path: reactive[Path | None] = reactive(None)
-
-    def compose(self) -> ComposeResult:
-        yield Static("◆ FILE INFO", classes="info-title")
-        yield Static("Select a file to view details", id="info-content")
-
-    def watch_selected_path(self, path: Path | None) -> None:
-        content = self.query_one("#info-content", Static)
-        if path is None:
-            content.update("Select a file to view details")
-            return
-
-        try:
-            size = path.stat().st_size
-            size_str = self._fmt_size(size)
-            ext = path.suffix.lower()
-
-            if ext in FileExplorer.VIDEO_EXT:
-                type_str = f"[cyan]Video[/] ({ext[1:].upper()})"
-                icon = "🎬"
-            elif ext in FileExplorer.AUDIO_EXT:
-                type_str = f"[green]Audio[/] ({ext[1:].upper()})"
-                icon = "🔊"
-            else:
-                type_str = f"[yellow]Transcript[/] ({ext[1:].upper()})"
-                icon = "📝"
-
-            info = Text()
-            info.append(f"{icon} {path.name}\n\n", style="bold white")
-            info.append("Size:     ", style="#64748b")
-            info.append(f"{size_str}\n", style="white")
-            info.append("Type:     ", style="#64748b")
-            info.append_text(Text.from_markup(type_str))
-            info.append("\n")
-            info.append("Path:     ", style="#64748b")
-            info.append(f"{path.parent}", style="#94a3b8")
-
-            content.update(info)
-        except Exception as e:
-            content.update(f"[red]Error:[/] {e}")
-
-    def _fmt_size(self, size: int) -> str:
-        for unit in ["B", "KB", "MB", "GB"]:
-            if size < 1024:
-                return f"{size:.1f} {unit}"
-            size /= 1024
-        return f"{size:.1f} TB"
-
-
-# =============================================================================
-# CONFIG PANEL
-# =============================================================================
-
-class ConfigPanel(Container):
-    """Configuration controls with collapsible advanced options."""
-
-    DEFAULT_CSS = """
-    ConfigPanel {
-        height: auto;
-        padding: 1;
-    }
-
-    ConfigPanel .section-title {
-        text-style: bold;
-        color: #818cf8;
-        margin-bottom: 1;
-    }
-
-    ConfigPanel Label {
-        color: #94a3b8;
-        margin-top: 1;
-    }
-
-    ConfigPanel Select {
-        margin-bottom: 1;
-    }
-
-    ConfigPanel Input {
-        margin-bottom: 1;
-    }
-
-    ConfigPanel Button {
-        width: 100%;
-        margin-top: 1;
-    }
-
-    ConfigPanel .btn-run {
-        background: #38bdf8;
-        color: #0a0e1a;
-        text-style: bold;
-    }
-
-    ConfigPanel .btn-run:hover {
-        background: #818cf8;
-    }
-
-    ConfigPanel .btn-cancel {
-        background: #374151;
-        color: #94a3b8;
-    }
-
-    ConfigPanel .btn-cancel:hover {
-        background: #ef4444;
-        color: white;
-    }
-
-    ConfigPanel Collapsible {
-        margin-top: 1;
-        background: #0f172a;
-        border: solid #334155;
-        padding: 0 1;
-    }
-    """
-
-    def compose(self) -> ComposeResult:
-        yield Static("◆ CONFIGURATION", classes="section-title")
-
-        yield Label("LLM Provider")
-        yield Select(
-            options=[("OpenAI", "openai"), ("Anthropic", "anthropic")],
-            value="openai",
-            id="provider"
-        )
-
-        yield Label("Model")
-        yield Input(value="gpt-4o-mini", id="model")
-
-        yield Label("Template")
-        yield Select(
-            options=[
-                ("Default", "default"),
-                ("SOP", "sop"),
-                ("Decision Log", "decision"),
-                ("Brainstorm", "brainstorm"),
-                ("Requirements", "requirements"),
-            ],
-            value="default",
-            id="template"
-        )
-
-        yield Checkbox("Auto-detect template", value=True, id="auto-detect")
-
-        with Collapsible(title="Advanced Options", collapsed=True):
-            yield Label("Chunk Size (seconds)")
-            yield Input(value="1800", id="chunk-size")
-
-            yield Label("CoD Passes")
-            yield Input(value="2", id="cod-passes")
-
-            yield Label("Max Output Tokens")
-            yield Input(value="3000", id="max-tokens")
-
-            yield Rule()
-
-            yield Checkbox("Normalize audio", value=True, id="normalize")
-            yield Checkbox("High quality extraction", value=True, id="hq")
-
-        yield Button("▶  Run Workflow", id="btn-run", classes="btn-run")
-        yield Button("■  Cancel", id="btn-cancel", classes="btn-cancel", disabled=True)
-
-
-# =============================================================================
 # PROGRESS PANEL
 # =============================================================================
 
 class ProgressPanel(Container):
-    """Current stage progress and ETA display."""
+    """Current stage progress display."""
 
     DEFAULT_CSS = """
     ProgressPanel {
@@ -531,10 +274,6 @@ class ProgressPanel(Container):
         margin-bottom: 1;
     }
 
-    ProgressPanel ProgressBar {
-        padding: 1 0;
-    }
-
     ProgressPanel ProgressBar > .bar--bar {
         color: #38bdf8;
     }
@@ -550,34 +289,319 @@ class ProgressPanel(Container):
     """
 
     stage_label: reactive[str] = reactive("Ready")
-    progress_value: reactive[float] = reactive(0)
+    progress_value: reactive[float] = reactive(0.0)
 
     def compose(self) -> ComposeResult:
-        yield Static("◆ CURRENT PROGRESS", classes="progress-title")
+        yield Static("* CURRENT PROGRESS", classes="progress-title")
         yield Static("Ready to process", classes="progress-stage", id="stage-text")
-        yield ProgressBar(total=100, show_eta=True, id="progress-bar")
-        yield Static("", classes="progress-eta", id="eta-text")
+        yield ProgressBar(total=100, show_eta=False, id="progress-bar")
+        yield Static("0%", classes="progress-eta", id="eta-text")
+
+    def on_mount(self) -> None:
+        try:
+            self.query_one("#progress-bar", ProgressBar).update(progress=0)
+        except Exception:
+            pass
 
     def watch_stage_label(self, label: str) -> None:
-        self.query_one("#stage-text", Static).update(label)
+        try:
+            self.query_one("#stage-text", Static).update(label)
+        except Exception:
+            pass
 
     def watch_progress_value(self, value: float) -> None:
-        self.query_one("#progress-bar", ProgressBar).update(progress=value)
+        try:
+            self.query_one("#progress-bar", ProgressBar).update(progress=value)
+            self.query_one("#eta-text", Static).update(f"{value:.0f}%")
+        except Exception:
+            pass
+
+    def reset(self) -> None:
+        self.progress_value = 0.0
+        self.stage_label = "Ready to process"
 
 
 # =============================================================================
-# MAIN APPLICATION
+# EXECUTION PANEL (Demo version)
+# =============================================================================
+
+class DemoExecutionPanel(Container):
+    """Demo execution panel matching production layout."""
+
+    DEFAULT_CSS = """
+    DemoExecutionPanel {
+        height: auto;
+        padding: 1;
+    }
+
+    DemoExecutionPanel .section-title {
+        text-style: bold;
+        color: #38bdf8;
+        margin-bottom: 1;
+        text-align: center;
+    }
+
+    DemoExecutionPanel .flow-group {
+        height: auto;
+        padding: 1;
+        background: #1e293b;
+        border: solid #334155;
+        margin-bottom: 1;
+    }
+
+    DemoExecutionPanel .flow-label {
+        color: #94a3b8;
+        margin-bottom: 1;
+    }
+
+    DemoExecutionPanel .flow-buttons {
+        height: auto;
+    }
+
+    DemoExecutionPanel .flow-btn {
+        width: 1fr;
+        margin: 0 1 0 0;
+    }
+
+    DemoExecutionPanel .flow-btn.-active {
+        background: #38bdf8;
+        color: #0a0e1a;
+        text-style: bold;
+    }
+
+    DemoExecutionPanel .file-group {
+        height: auto;
+        padding: 1;
+        background: #1e293b;
+        border: solid #334155;
+        margin-bottom: 1;
+    }
+
+    DemoExecutionPanel .file-row {
+        height: auto;
+    }
+
+    DemoExecutionPanel #demo-file-path {
+        width: 1fr;
+    }
+
+    DemoExecutionPanel #btn-demo-browse {
+        width: auto;
+        min-width: 10;
+        margin-left: 1;
+        background: #374151;
+    }
+
+    DemoExecutionPanel .file-info {
+        color: #64748b;
+        height: auto;
+        margin-top: 1;
+    }
+
+    DemoExecutionPanel .template-group {
+        height: auto;
+        padding: 1;
+        background: #1e293b;
+        border: solid #334155;
+        margin-bottom: 1;
+    }
+
+    DemoExecutionPanel .template-group Checkbox {
+        margin: 0;
+        padding: 0;
+        height: auto;
+    }
+
+    DemoExecutionPanel .config-group {
+        height: auto;
+        padding: 1;
+        background: #1e293b;
+        border: solid #334155;
+        margin-bottom: 1;
+    }
+
+    DemoExecutionPanel Label {
+        color: #94a3b8;
+        margin-top: 1;
+    }
+
+    DemoExecutionPanel .action-group {
+        height: auto;
+        padding: 1;
+    }
+
+    DemoExecutionPanel #btn-run-demo {
+        width: 100%;
+        background: #38bdf8;
+        color: #0a0e1a;
+        text-style: bold;
+    }
+
+    DemoExecutionPanel #btn-run-demo:hover {
+        background: #818cf8;
+    }
+
+    DemoExecutionPanel #btn-run-demo.btn-cancel-mode {
+        background: #ef4444;
+    }
+    """
+
+    selected_flow: reactive[str] = reactive("video")
+
+    def compose(self) -> ComposeResult:
+        yield Static("* WORKFLOW EXECUTION", classes="section-title")
+
+        # Flow Type Selection
+        with Vertical(classes="flow-group"):
+            yield Static("Select Input Type:", classes="flow-label")
+            with Horizontal(classes="flow-buttons"):
+                yield Button("[V] Video", id="flow-video", classes="flow-btn -active")
+                yield Button("[A] Audio", id="flow-audio", classes="flow-btn")
+                yield Button("[T] Transcript", id="flow-transcript", classes="flow-btn")
+
+        # File Selection (Demo)
+        with Vertical(classes="file-group"):
+            yield Static("Select File:", classes="flow-label")
+            with Horizontal(classes="file-row"):
+                yield Input(placeholder="Click Browse to select file...", id="demo-file-path")
+                yield Button("[Browse]", id="btn-demo-browse")
+            yield Static("No file selected", classes="file-info", id="demo-file-info")
+
+        # Template Options
+        with Vertical(classes="template-group"):
+            yield Static("Templates:", classes="flow-label")
+            yield Checkbox("Auto-detect template", value=True, id="demo-tpl-auto")
+            yield Checkbox("Default", value=False, id="demo-tpl-default")
+            yield Checkbox("SOP", value=False, id="demo-tpl-sop")
+            yield Checkbox("Decision Log", value=False, id="demo-tpl-decision")
+
+        # Config Settings
+        with Vertical(classes="config-group"):
+            yield Static("Settings:", classes="flow-label")
+
+            yield Label("LLM Provider")
+            yield Select(
+                options=[("OpenAI", "openai"), ("Anthropic", "anthropic")],
+                value="openai",
+                id="demo-provider"
+            )
+
+            yield Label("Model")
+            yield Input(value="gpt-4o-mini", id="demo-model")
+
+            with Collapsible(title="Advanced Options", collapsed=True):
+                yield Label("Chunk Size (seconds)")
+                yield Input(value="1800", id="demo-chunk-size")
+                yield Checkbox("Normalize audio", value=True, id="demo-normalize")
+
+        # Action Button
+        with Vertical(classes="action-group"):
+            yield Button("[>] Run Workflow", id="btn-run-demo")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        btn_id = event.button.id
+        if btn_id and btn_id.startswith("flow-"):
+            flow_type = btn_id.replace("flow-", "")
+            self._set_active_flow(flow_type)
+
+    def _set_active_flow(self, flow_type: str) -> None:
+        self.selected_flow = flow_type
+        for btn_id in ["flow-video", "flow-audio", "flow-transcript"]:
+            try:
+                btn = self.query_one(f"#{btn_id}", Button)
+                if btn_id == f"flow-{flow_type}":
+                    btn.add_class("-active")
+                else:
+                    btn.remove_class("-active")
+            except Exception:
+                pass
+
+    def set_demo_file(self, name: str, size: str, file_type: str) -> None:
+        """Set demo file display."""
+        try:
+            self.query_one("#demo-file-path", Input).value = f"data/input/{name}"
+            self.query_one("#demo-file-info", Static).update(
+                f"[OK] {name} ({size}, {file_type.upper()})"
+            )
+        except Exception:
+            pass
+
+    def set_processing(self, is_processing: bool) -> None:
+        try:
+            btn = self.query_one("#btn-run-demo", Button)
+            if is_processing:
+                btn.label = "[X] Cancel"
+                btn.add_class("btn-cancel-mode")
+            else:
+                btn.label = "[>] Run Workflow"
+                btn.remove_class("btn-cancel-mode")
+        except Exception:
+            pass
+
+
+# =============================================================================
+# CONFIG PANEL (Demo - API Keys only)
+# =============================================================================
+
+class DemoConfigPanel(Container):
+    """Demo config panel for API keys and settings."""
+
+    DEFAULT_CSS = """
+    DemoConfigPanel {
+        height: auto;
+        padding: 1;
+    }
+
+    DemoConfigPanel .section-title {
+        text-style: bold;
+        color: #818cf8;
+        margin-bottom: 1;
+    }
+
+    DemoConfigPanel Label {
+        color: #fbbf24;
+        margin-top: 1;
+    }
+
+    DemoConfigPanel Input {
+        margin-bottom: 1;
+    }
+
+    DemoConfigPanel Button {
+        width: 100%;
+        margin-top: 1;
+        background: #22c55e;
+        color: #0a0e1a;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        yield Static("* CONFIGURATION", classes="section-title")
+
+        with Collapsible(title="API Keys", collapsed=False):
+            yield Label("OpenAI API Key")
+            yield Input(value="sk-****...****demo", id="demo-openai-key")
+
+            yield Label("Anthropic API Key")
+            yield Input(value="sk-ant-****...****demo", id="demo-anthropic-key")
+
+            yield Label("Replicate Token")
+            yield Input(value="r8_****...****demo", id="demo-replicate-token")
+
+        yield Button("[Save] Save Config", id="btn-demo-save")
+
+
+# =============================================================================
+# MAIN DEMO APPLICATION
 # =============================================================================
 
 class SummeetsDemo(App):
     """
-    Summeets TUI Demo - Showcases the visual design and layout.
+    Summeets TUI Demo - Showcases the new two-panel layout.
 
-    Demonstrates:
-    - Futuristic dark theme
-    - Anti-flicker reactive updates
-    - Three-panel responsive layout
-    - Simulated workflow execution
+    Layout:
+    - Left Panel: Config/Logs (Full Log default)
+    - Right Panel: Execution panel + Pipeline
     """
 
     CSS = """
@@ -591,43 +615,33 @@ class SummeetsDemo(App):
         color: #38bdf8;
     }
 
-    Header > .header--title {
-        text-style: bold;
-        color: #38bdf8;
-    }
-
     #main-container {
         height: 1fr;
     }
 
     #left-panel {
-        width: 28%;
+        width: 45%;
         background: #0f172a;
         border: solid #1e3a5f;
         margin: 0 0 0 1;
     }
 
-    #center-panel {
-        width: 44%;
-        background: #0f172a;
-        border: solid #1e3a5f;
-        margin: 0 1;
-    }
-
     #right-panel {
-        width: 28%;
+        width: 55%;
         background: #0f172a;
         border: solid #1e3a5f;
         margin: 0 1 0 0;
+        overflow-y: auto;
     }
 
-    .panel-header {
-        text-style: bold;
-        color: #818cf8;
-        padding: 1;
-        background: #1e293b;
-        text-align: center;
-        border-bottom: solid #334155;
+    #exec-scroll {
+        height: auto;
+        scrollbar-color: #38bdf8;
+    }
+
+    #pipeline-area {
+        height: auto;
+        padding: 0;
     }
 
     #status-bar {
@@ -636,23 +650,6 @@ class SummeetsDemo(App):
         background: #1e293b;
         color: #94a3b8;
         padding: 0 2;
-    }
-
-    #status-bar .status-ready {
-        color: #22c55e;
-    }
-
-    #status-bar .status-processing {
-        color: #38bdf8;
-    }
-
-    #stage-log {
-        height: 1fr;
-        background: #0c1322;
-        border: solid #1e3a5f;
-        margin: 1;
-        padding: 1;
-        scrollbar-color: #38bdf8;
     }
 
     Footer {
@@ -681,23 +678,44 @@ class SummeetsDemo(App):
         padding: 0 2;
     }
 
-    Tab:hover {
-        background: #1e293b;
-        color: #94a3b8;
-    }
-
     Tab.-active {
         background: #0f172a;
         color: #38bdf8;
         text-style: bold;
     }
 
+    #log-tab-container {
+        height: 1fr;
+    }
+
+    #log-header {
+        height: auto;
+        background: #1e293b;
+        padding: 0 1;
+    }
+
+    #btn-copy-log {
+        dock: right;
+        width: auto;
+        min-width: 10;
+        background: #374151;
+    }
+
+    #config-scroll {
+        height: 1fr;
+        scrollbar-color: #38bdf8;
+    }
+
     #preview-pane {
         padding: 1;
     }
 
-    #preview-pane Markdown {
-        padding: 1;
+    Checkbox > .toggle--button {
+        color: #64748b;
+    }
+
+    Checkbox.-on > .toggle--button {
+        color: #38bdf8;
     }
     """
 
@@ -705,71 +723,90 @@ class SummeetsDemo(App):
         Binding("q", "quit", "Quit"),
         Binding("r", "run_demo", "Run Demo"),
         Binding("escape", "cancel", "Cancel"),
-        Binding("d", "toggle_dark", "Theme"),
     ]
 
-    TITLE = "SUMMEETS"
+    TITLE = "SUMMEETS DEMO"
     SUB_TITLE = "Video Transcription & Summarization"
 
-    selected_file: reactive[Path | None] = reactive(None)
     is_processing: reactive[bool] = reactive(False)
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
 
         with Horizontal(id="main-container"):
-            # LEFT PANEL - File Browser
+            # LEFT PANEL - Config & Logs (Full Log default)
             with Vertical(id="left-panel"):
-                yield Static("◆ FILE EXPLORER", classes="panel-header")
-                yield FileExplorer(".", id="file-explorer")
-                yield FileInfo(id="file-info")
-
-            # CENTER PANEL - Pipeline & Logs
-            with Vertical(id="center-panel"):
-                yield PipelineStatus(id="pipeline")
-                yield ProgressPanel(id="progress-panel")
-                yield Static("◆ ACTIVITY LOG", classes="panel-header")
-                yield RichLog(id="stage-log", highlight=True, markup=True, wrap=True)
-
-            # RIGHT PANEL - Config & Preview
-            with Vertical(id="right-panel"):
-                with TabbedContent():
+                with TabbedContent(initial="log-tab"):
+                    with TabPane("Full Log", id="log-tab"):
+                        with Vertical(id="log-tab-container"):
+                            with Horizontal(id="log-header"):
+                                yield Static("* FULL LOG")
+                                yield Button("[Copy]", id="btn-copy-log")
+                            yield RichLog(id="full-log", highlight=True, markup=True)
+                    with TabPane("Activity", id="activity-tab"):
+                        yield RichLog(id="stage-log", highlight=True, markup=True, wrap=True)
                     with TabPane("Config", id="config-tab"):
-                        yield ConfigPanel(id="config")
+                        with ScrollableContainer(id="config-scroll"):
+                            yield DemoConfigPanel(id="demo-config")
                     with TabPane("Preview", id="preview-tab"):
                         with ScrollableContainer(id="preview-pane"):
                             yield Markdown(SAMPLE_SUMMARY, id="preview-md")
-                    with TabPane("Full Log", id="log-tab"):
-                        yield RichLog(id="full-log", highlight=True, markup=True)
 
-        yield Static("● Ready | No file selected", id="status-bar")
+            # RIGHT PANEL - Execution + Pipeline
+            with Vertical(id="right-panel"):
+                with ScrollableContainer(id="exec-scroll"):
+                    yield DemoExecutionPanel(id="demo-execution")
+                    with Vertical(id="pipeline-area"):
+                        yield PipelineStatus(id="pipeline")
+                        yield ProgressPanel(id="progress-panel")
+
+        yield Static("[*] Ready | DEMO MODE | Press [R] to run simulation", id="status-bar")
         yield Footer()
 
     def on_mount(self) -> None:
-        self._log("✦ Summeets TUI initialized", "bold cyan")
-        self._log("Select a file and press [R] to run demo workflow", "dim")
+        self._log("[*] Summeets TUI Demo initialized", "bold cyan")
+        self._log("This is a DEMO with simulated workflow", "dim")
+        self._log("Press [R] or click Run Workflow to start", "dim")
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Event Handlers
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
-    def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
-        self.selected_file = event.path
-        self.query_one("#file-info", FileInfo).selected_path = event.path
-        self._update_status()
-        self._log(f"Selected: [cyan]{event.path.name}[/]")
-
-    @on(Button.Pressed, "#btn-run")
+    @on(Button.Pressed, "#btn-run-demo")
     def on_run_pressed(self) -> None:
-        self.action_run_demo()
+        if self.is_processing:
+            self.action_cancel()
+        else:
+            self.action_run_demo()
 
-    @on(Button.Pressed, "#btn-cancel")
-    def on_cancel_pressed(self) -> None:
-        self.action_cancel()
+    @on(Button.Pressed, "#btn-demo-browse")
+    def on_browse_pressed(self) -> None:
+        # Simulate file selection
+        exec_panel = self.query_one("#demo-execution", DemoExecutionPanel)
+        flow = exec_panel.selected_flow
+
+        demo_files = {
+            "video": ("meeting_2024-01-15.mp4", "245 MB", "mp4"),
+            "audio": ("interview_recording.m4a", "48 MB", "m4a"),
+            "transcript": ("transcript_final.json", "128 KB", "json"),
+        }
+
+        name, size, ext = demo_files.get(flow, demo_files["video"])
+        exec_panel.set_demo_file(name, size, ext)
+        self._log(f"Selected: [cyan]{name}[/]")
+        self._update_status(f"{name} ({flow})")
+
+    @on(Button.Pressed, "#btn-copy-log")
+    def on_copy_log(self) -> None:
+        self._log("[OK] Log copied to clipboard (demo)", "green")
+
+    @on(Button.Pressed, "#btn-demo-save")
+    def on_save_config(self) -> None:
+        self._log("[OK] Config saved (demo)", "green")
 
     def on_stage_update(self, msg: StageUpdate) -> None:
         pipeline = self.query_one("#pipeline", PipelineStatus)
-        pipeline.update_stage(msg.stage_id, msg.status)
+        pipeline.update_stage(msg.stage_id, msg.status, msg.elapsed)
 
     def on_log_message(self, msg: LogMessage) -> None:
         self._log(msg.text, msg.style)
@@ -782,133 +819,125 @@ class SummeetsDemo(App):
 
     def on_workflow_done(self, msg: WorkflowDone) -> None:
         self.is_processing = False
-        self._toggle_buttons(False)
+        self.query_one("#demo-execution", DemoExecutionPanel).set_processing(False)
 
         if msg.success:
-            self._log("✓ Workflow completed successfully!", "bold green")
-            # Switch to preview tab
+            self._log("[OK] Workflow completed successfully!", "bold green")
             tabs = self.query_one(TabbedContent)
             tabs.active = "preview-tab"
         else:
-            self._log("✗ Workflow failed", "bold red")
+            self._log("[X] Workflow failed", "bold red")
 
-        self._update_status()
+        self._update_status("Complete!")
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Actions
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     def action_run_demo(self) -> None:
         if self.is_processing:
             return
 
         self.is_processing = True
-        self._toggle_buttons(True)
+        self.query_one("#demo-execution", DemoExecutionPanel).set_processing(True)
 
         # Reset pipeline
         self.query_one("#pipeline", PipelineStatus).reset()
         panel = self.query_one("#progress-panel", ProgressPanel)
-        panel.progress_value = 0
+        panel.reset()
         panel.stage_label = "Starting..."
 
-        self._log("━" * 40, "dim")
-        self._log("▶ Starting demo workflow simulation", "bold cyan")
+        exec_panel = self.query_one("#demo-execution", DemoExecutionPanel)
+        flow = exec_panel.selected_flow
 
-        # Start simulation
+        self._log("-" * 40, "dim")
+        self._log(f"[>] Starting demo workflow ({flow} flow)", "bold cyan")
+
         self.simulate_workflow()
 
     def action_cancel(self) -> None:
         for w in self.workers:
             w.cancel()
         self.is_processing = False
-        self._toggle_buttons(False)
-        self._log("⚠ Workflow cancelled", "yellow")
-        self._update_status()
+        self.query_one("#demo-execution", DemoExecutionPanel).set_processing(False)
+        self._log("[!] Workflow cancelled", "yellow")
+        self._update_status("Cancelled")
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Background Worker - Simulated Workflow
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     @work(thread=True, exclusive=True)
-    async def simulate_workflow(self) -> None:
+    def simulate_workflow(self) -> None:
         """Simulate the 4-stage workflow with progress updates."""
-        import time
-
         worker = get_current_worker()
+
         stages = [
-            ("extract", "Extracting audio from video", 3),
-            ("process", "Processing & normalizing audio", 2),
-            ("transcribe", "Transcribing with speaker diarization", 5),
-            ("summarize", "Generating summary with CoD", 4),
+            ("extract", "Extracting audio from video", 2),
+            ("process", "Processing & normalizing audio", 1.5),
+            ("transcribe", "Transcribing with speaker diarization", 3),
+            ("summarize", "Generating summary with CoD", 2.5),
         ]
 
-        total_steps = sum(s[2] for s in stages)
-        current_step = 0
+        total_duration = sum(s[2] for s in stages)
+        elapsed_total = 0
 
         for stage_id, description, duration in stages:
             if worker.is_cancelled:
                 return
 
-            # Start stage
             self.post_message(StageUpdate(stage_id, "active"))
-            self.post_message(LogMessage(f"▸ {description}...", "cyan"))
+            self.post_message(LogMessage(f"[>] {description}...", "cyan"))
 
-            # Simulate progress
-            for i in range(duration * 10):
+            steps = int(duration * 10)
+            for i in range(steps):
                 if worker.is_cancelled:
                     return
 
-                progress = (current_step + (i / (duration * 10))) / total_steps * 100
-                self.post_message(OverallProgress(progress, f"{description} ({i * 10 // duration}%)"))
+                progress = ((elapsed_total + (i / 10)) / total_duration) * 100
+                self.post_message(OverallProgress(progress, f"{description}"))
 
                 if i % 10 == 5:
-                    self.post_message(LogMessage(f"  Processing segment {i + 1}...", "dim"))
+                    self.post_message(LogMessage(f"  Processing chunk {i + 1}...", "dim"))
 
                 time.sleep(0.1)
 
-            # Complete stage
-            current_step += 1
+            elapsed_total += duration
             self.post_message(StageUpdate(stage_id, "complete", f"{duration}s"))
-            self.post_message(LogMessage(f"  ✓ Completed in {duration}s", "green"))
+            self.post_message(LogMessage(f"  [OK] Completed in {duration}s", "green"))
 
-        # Done
         self.post_message(OverallProgress(100, "Complete!"))
         self.post_message(WorkflowDone(True))
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Helpers
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     def _log(self, text: str, style: str = "") -> None:
         ts = datetime.now().strftime("%H:%M:%S")
         msg = Text()
         msg.append(f"[{ts}] ", style="dim")
-        msg.append_text(Text.from_markup(text) if "[" in text else Text(text, style=style))
-
-        self.query_one("#stage-log", RichLog).write(msg)
-        self.query_one("#full-log", RichLog).write(msg)
-
-    def _toggle_buttons(self, processing: bool) -> None:
-        self.query_one("#btn-run", Button).disabled = processing
-        self.query_one("#btn-cancel", Button).disabled = not processing
-
-    def _update_status(self) -> None:
-        bar = self.query_one("#status-bar", Static)
-        parts = []
-
-        if self.is_processing:
-            parts.append("[#38bdf8]● Processing[/]")
+        if "[" in text and "/" in text:
+            msg.append_text(Text.from_markup(text))
         else:
-            parts.append("[#22c55e]● Ready[/]")
+            msg.append(text, style=style)
 
-        if self.selected_file:
-            parts.append(f"[white]{self.selected_file.name}[/]")
-        else:
-            parts.append("[dim]No file selected[/]")
+        try:
+            self.query_one("#stage-log", RichLog).write(msg)
+            self.query_one("#full-log", RichLog).write(msg)
+        except Exception:
+            pass
 
-        parts.append("[dim]OpenAI/gpt-4o-mini[/]")
-
-        bar.update(Text.from_markup(" │ ".join(parts)))
+    def _update_status(self, info: str = "") -> None:
+        try:
+            bar = self.query_one("#status-bar", Static)
+            status = "[*] Processing" if self.is_processing else "[*] Ready"
+            parts = [status, "DEMO MODE"]
+            if info:
+                parts.append(info)
+            bar.update(" | ".join(parts))
+        except Exception:
+            pass
 
 
 # =============================================================================
@@ -952,13 +981,13 @@ and resource allocation for the new product launch.
 ---
 
 ## Decisions Made
-1. ✅ Approved $50K additional cloud budget
-2. ✅ Delayed feature X to Q2 (deprioritized)
-3. ✅ Hired contractor for security audit
+1. Approved $50K additional cloud budget
+2. Delayed feature X to Q2 (deprioritized)
+3. Hired contractor for security audit
 
 ---
 
-*Generated by Summeets • Processing time: 14.3s*
+*Generated by Summeets Demo*
 """
 
 
@@ -966,6 +995,11 @@ and resource allocation for the new product launch.
 # ENTRY POINT
 # =============================================================================
 
-if __name__ == "__main__":
+def run() -> None:
+    """Launch the demo."""
     app = SummeetsDemo()
     app.run()
+
+
+if __name__ == "__main__":
+    run()

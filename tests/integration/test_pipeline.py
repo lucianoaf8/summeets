@@ -78,7 +78,7 @@ class TestTranscriptionPipeline:
         
         pipeline = TranscriptionPipeline()
         
-        with patch('src.transcribe.new_pipeline.pick_best_audio') as mock_pick:
+        with patch('src.transcribe.pipeline.pick_best_audio') as mock_pick:
             mock_pick.return_value = audio_file
             result = pipeline.process_audio_input(tmp_path)
         
@@ -92,38 +92,36 @@ class TestTranscriptionPipeline:
         with pytest.raises(FileNotFoundError):
             pipeline.process_audio_input(Path("/nonexistent/path"))
     
-    @patch('builtins.input', return_value="/test/path/audio.mp3")
-    def test_process_audio_input_interactive(self, mock_input, tmp_path):
-        """Test interactive audio input processing."""
-        # Create the file that input() returns
+    def test_process_audio_input_with_callback(self, tmp_path):
+        """Test audio input processing with path callback."""
+        # Create the file that callback returns
         audio_file = tmp_path / "audio.mp3"
         audio_file.touch()
-        
+
         pipeline = TranscriptionPipeline()
-        
-        # Mock Path.resolve() to return our test file
-        with patch.object(Path, 'resolve', return_value=audio_file):
-            with patch.object(Path, 'exists', return_value=True):
-                with patch.object(Path, 'is_dir', return_value=False):
-                    result = pipeline.process_audio_input()
-        
-        assert str(result) == str(audio_file)
-        mock_input.assert_called_once()
+
+        # Provide a callback that returns our test file
+        def path_callback():
+            return audio_file
+
+        result = pipeline.process_audio_input(path_callback=path_callback)
+
+        assert result == audio_file
     
     def test_prepare_audio(self, mock_audio_file):
         """Test audio preparation (conversion and compression)."""
         pipeline = TranscriptionPipeline()
-        
+
         prepared_file = mock_audio_file.parent / "prepared.wav"
         compressed_file = mock_audio_file.parent / "compressed.opus"
-        
-        with patch('src.transcribe.new_pipeline.ensure_wav16k_mono') as mock_convert:
-            with patch('src.transcribe.new_pipeline.compress_audio_for_upload') as mock_compress:
+
+        with patch('src.transcribe.pipeline.ensure_wav16k_mono') as mock_convert:
+            with patch('src.transcribe.pipeline.compress_audio_for_upload') as mock_compress:
                 mock_convert.return_value = prepared_file
                 mock_compress.return_value = compressed_file
-                
+
                 result = pipeline.prepare_audio(mock_audio_file)
-        
+
         assert result == compressed_file
         mock_convert.assert_called_once_with(mock_audio_file)
         mock_compress.assert_called_once_with(prepared_file)
@@ -132,11 +130,11 @@ class TestTranscriptionPipeline:
         """Test successful audio transcription."""
         pipeline = TranscriptionPipeline()
         pipeline.transcriber = mock_transcriber
-        
-        with patch('src.transcribe.new_pipeline.parse_replicate_output') as mock_parse:
+
+        with patch('src.transcribe.pipeline.parse_replicate_output') as mock_parse:
             mock_segments = [
-                Segment(0.0, 5.0, "Hello, this is a test.", "SPEAKER_00"),
-                Segment(5.0, 10.0, "This is another segment.", "SPEAKER_01")
+                Segment(start=0.0, end=5.0, text="Hello, this is a test.", speaker="SPEAKER_00"),
+                Segment(start=5.0, end=10.0, text="This is another segment.", speaker="SPEAKER_01")
             ]
             mock_parse.return_value = mock_segments
             
@@ -161,12 +159,12 @@ class TestTranscriptionPipeline:
     def test_save_outputs(self, tmp_path, mock_audio_file):
         """Test saving transcription outputs."""
         pipeline = TranscriptionPipeline()
-        
+
         segments = [
-            Segment(0.0, 5.0, "Test segment", "SPEAKER_00"),
+            Segment(start=0.0, end=5.0, text="Test segment", speaker="SPEAKER_00"),
         ]
-        
-        with patch('src.transcribe.new_pipeline.format_transcript_output') as mock_format:
+
+        with patch('src.transcribe.pipeline.format_transcript_output') as mock_format:
             expected_json = tmp_path / "test_audio.json"
             mock_format.return_value = {"json": expected_json}
             
@@ -185,14 +183,14 @@ class TestTranscriptionPipeline:
             with patch.object(pipeline, 'prepare_audio') as mock_prepare:
                 with patch.object(pipeline, 'transcribe_audio_file') as mock_transcribe:
                     with patch.object(pipeline, 'save_outputs') as mock_save:
-                        with patch('src.transcribe.new_pipeline.cleanup_temp_file') as mock_cleanup:
+                        with patch('src.transcribe.pipeline.cleanup_temp_file') as mock_cleanup:
                             
                             # Set up mocks
                             mock_input.return_value = mock_audio_file
                             prepared_file = mock_audio_file.parent / "prepared.wav"
                             mock_prepare.return_value = prepared_file
                             
-                            mock_segments = [Segment(0.0, 5.0, "Test", "SPEAKER_00")]
+                            mock_segments = [Segment(start=0.0, end=5.0, text="Test", speaker="SPEAKER_00")]
                             mock_transcribe.return_value = mock_segments
                             
                             output_file = tmp_path / "output.json"
@@ -214,32 +212,32 @@ class TestTranscriptionPipeline:
     def test_run_pipeline_with_error(self, mock_audio_file, tmp_path):
         """Test pipeline run with error and cleanup."""
         pipeline = TranscriptionPipeline()
-        
+
         with patch.object(pipeline, 'process_audio_input') as mock_input:
             with patch.object(pipeline, 'prepare_audio') as mock_prepare:
                 with patch.object(pipeline, 'transcribe_audio_file') as mock_transcribe:
-                    with patch('src.transcribe.new_pipeline.cleanup_temp_file') as mock_cleanup:
-                        
+                    with patch('src.transcribe.pipeline.cleanup_temp_file') as mock_cleanup:
+
                         # Set up mocks
                         mock_input.return_value = mock_audio_file
                         prepared_file = mock_audio_file.parent / "prepared.wav"
                         mock_prepare.return_value = prepared_file
-                        
+
                         # Make transcription fail
                         mock_transcribe.side_effect = TranscriptionError("API failed")
-                        
+
                         # Run pipeline and expect error
                         with pytest.raises(TranscriptionError):
                             pipeline.run(mock_audio_file, tmp_path)
-                        
+
                         # Verify cleanup still happened
                         mock_cleanup.assert_called_once_with(prepared_file, mock_audio_file)
     
     def test_convenience_function(self, mock_audio_file, tmp_path):
         """Test the convenience run() function."""
-        from src.transcribe.new_pipeline import run
-        
-        with patch('src.transcribe.new_pipeline.TranscriptionPipeline') as mock_pipeline_class:
+        from src.transcribe.pipeline import run
+
+        with patch('src.transcribe.pipeline.TranscriptionPipeline') as mock_pipeline_class:
             mock_pipeline = Mock()
             mock_pipeline_class.return_value = mock_pipeline
             mock_pipeline.run.return_value = tmp_path / "output.json"
@@ -247,7 +245,7 @@ class TestTranscriptionPipeline:
             result = run(mock_audio_file, tmp_path)
             
             mock_pipeline_class.assert_called_once()
-            mock_pipeline.run.assert_called_once_with(mock_audio_file, tmp_path)
+            mock_pipeline.run.assert_called_once_with(mock_audio_file, tmp_path, None)
             assert result == tmp_path / "output.json"
 
 
@@ -276,7 +274,7 @@ class TestProgressCallback:
         mock_transcriber.transcribe.side_effect = mock_transcribe_with_callback
         pipeline.transcriber = mock_transcriber
         
-        with patch('src.transcribe.new_pipeline.parse_replicate_output', return_value=[]):
+        with patch('src.transcribe.pipeline.parse_replicate_output', return_value=[]):
             pipeline.transcribe_audio_file(mock_audio_file)
         
         # Verify progress callback was used
@@ -294,8 +292,8 @@ class TestEdgeCases:
         pipeline = TranscriptionPipeline()
         pipeline.transcriber = Mock()
         pipeline.transcriber.transcribe.return_value = {"segments": []}
-        
-        with patch('src.transcribe.new_pipeline.parse_replicate_output') as mock_parse:
+
+        with patch('src.transcribe.pipeline.parse_replicate_output') as mock_parse:
             mock_parse.return_value = []
             result = pipeline.transcribe_audio_file(mock_audio_file)
         
@@ -306,10 +304,10 @@ class TestEdgeCases:
         pipeline = TranscriptionPipeline()
         pipeline.transcriber = Mock()
         pipeline.transcriber.transcribe.return_value = {"invalid": "data"}
-        
-        with patch('src.transcribe.new_pipeline.parse_replicate_output') as mock_parse:
+
+        with patch('src.transcribe.pipeline.parse_replicate_output') as mock_parse:
             mock_parse.side_effect = KeyError("segments")
-            
+
             with pytest.raises(KeyError):
                 pipeline.transcribe_audio_file(mock_audio_file)
     
@@ -317,7 +315,7 @@ class TestEdgeCases:
         """Test handling of output directory creation failure."""
         pipeline = TranscriptionPipeline()
         
-        segments = [Segment(0.0, 5.0, "Test", "SPEAKER_00")]
+        segments = [Segment(start=0.0, end=5.0, text="Test", speaker="SPEAKER_00")]
         non_writable_dir = tmp_path / "non_writable"
         
         with patch.object(Path, 'mkdir', side_effect=PermissionError("Access denied")):

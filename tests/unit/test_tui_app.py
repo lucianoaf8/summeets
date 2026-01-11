@@ -48,7 +48,7 @@ class TestSummeetsAppBindings:
         assert "r" in binding_keys  # Run
         assert "c" in binding_keys  # Config
         assert "escape" in binding_keys  # Cancel
-        assert "f5" in binding_keys  # Refresh
+        # Note: f5/Refresh binding was removed in UI refactor
 
     def test_binding_actions(self):
         """Test binding actions map correctly."""
@@ -63,7 +63,7 @@ class TestSummeetsAppBindings:
         assert binding_map["r"] == "run_workflow"
         assert binding_map["c"] == "focus_config"
         assert binding_map["escape"] == "cancel_workflow"
-        assert binding_map["f5"] == "refresh_explorer"
+        # Note: f5/Refresh binding was removed in UI refactor
 
 
 class TestSummeetsAppHelpers:
@@ -143,13 +143,13 @@ class TestSummeetsAppCSS:
 
         css = SummeetsApp.CSS
 
-        # Check for essential layout selectors
+        # Check for essential layout selectors (2-panel layout)
         assert "Screen" in css
         assert "Header" in css
         assert "#main-container" in css
         assert "#left-panel" in css
-        assert "#center-panel" in css
         assert "#right-panel" in css
+        # Note: #center-panel removed in 2-panel layout refactor
 
 
 class TestRunFunction:

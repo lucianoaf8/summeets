@@ -6,15 +6,16 @@ Supports conditional execution based on input file type and user configuration.
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable
-from dataclasses import dataclass
 
-from .models import TranscriptData, SummaryData, InputFileType
+from pydantic import BaseModel, Field, ConfigDict
+
+from .models import TranscriptData, SummaryData, InputFileType, WorkflowStep
 from .utils.validation import validate_workflow_input, detect_file_type
 from .utils.exceptions import SummeetsError
 from .utils.config import SETTINGS
 from .utils.fsio import get_data_manager
 from .audio.ffmpeg_ops import (
-    extract_audio_from_video, 
+    extract_audio_from_video,
     increase_audio_volume,
     convert_audio_format,
     normalize_loudness,
@@ -22,207 +23,120 @@ from .audio.ffmpeg_ops import (
 )
 from .transcribe.pipeline import run as transcribe_run
 from .summarize.pipeline import run as summarize_run
+from .workflow_components import WorkflowValidator, WorkflowStepFactory, WorkflowExecutor
 
 log = logging.getLogger(__name__)
 
 
-@dataclass
-class WorkflowStep:
-    """Represents a single workflow step."""
-    name: str
-    enabled: bool
-    function: Callable[[Dict[str, Any]], Dict[str, Any]]
-    settings: Dict[str, Any]
-    required_input_type: Optional[str] = None
-    
-    def can_execute(self, file_type: str) -> bool:
-        """Check if this step can execute for the given file type."""
-        if not self.enabled:
-            return False
-        if self.required_input_type and self.required_input_type != file_type:
-            return False
-        return True
-
-
-@dataclass
-class WorkflowConfig:
+class WorkflowConfig(BaseModel):
     """Configuration for workflow execution."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     # File paths
     input_file: Path
     output_dir: Path
-    
+
     # Step enablement
     extract_audio: bool = True
     process_audio: bool = True
     transcribe: bool = True
     summarize: bool = True
-    
+
     # Extract audio settings
     audio_format: str = "m4a"
     audio_quality: str = "high"
-    
+
     # Process audio settings
     increase_volume: bool = False
     volume_gain_db: float = 10.0
     normalize_audio: bool = True
-    output_formats: List[str] = None
-    
+    output_formats: List[str] = Field(default_factory=lambda: ["m4a"])
+
     # Transcribe settings
     transcribe_model: str = "thomasmol/whisper-diarization"
     language: str = "auto"
-    
+
     # Summarize settings
     summary_template: str = "Default"
     provider: str = "openai"
     model: str = "gpt-4o-mini"
     auto_detect_template: bool = True
-    
-    def __post_init__(self):
-        if self.output_formats is None:
-            self.output_formats = ["m4a"]
 
 
 class WorkflowEngine:
-    """Main workflow execution engine."""
-    
-    def __init__(self, config: WorkflowConfig):
-        """Initialize workflow engine with configuration."""
+    """Main workflow execution engine.
+
+    Uses composition with specialized components:
+    - WorkflowValidator: Configuration validation
+    - WorkflowStepFactory: Step creation
+    - WorkflowExecutor: Step execution
+    """
+
+    def __init__(
+        self,
+        config: WorkflowConfig,
+        validator: Optional[WorkflowValidator] = None,
+        step_factory: Optional[WorkflowStepFactory] = None,
+        executor: Optional[WorkflowExecutor] = None
+    ):
+        """Initialize workflow engine with configuration and optional components.
+
+        Args:
+            config: WorkflowConfig instance
+            validator: Optional custom validator (for testing)
+            step_factory: Optional custom step factory (for testing)
+            executor: Optional custom executor (for testing)
+        """
         self.config = config
         self.file_type = None
         self.current_audio_file = None
         self.current_transcript = None
         self.results = {}
-        
-        # Validate input
+
+        # Initialize components (allow injection for testing)
+        self._validator = validator or WorkflowValidator()
+        self._executor = executor or WorkflowExecutor()
+
+        # Validate input using component
         self._validate_config()
-        
+
+        # Step factory needs engine reference for step functions
+        self._step_factory = step_factory or WorkflowStepFactory(self)
+
     def _validate_config(self):
-        """Validate workflow configuration."""
-        # Validate input file and determine type
-        validated_path, file_type = validate_workflow_input(self.config.input_file)
+        """Validate workflow configuration using validator component."""
+        validated_path, file_type = self._validator.validate(self.config)
         self.config.input_file = validated_path
         self.file_type = file_type
-        
-        log.info(f"Detected file type: {file_type} for {self.config.input_file}")
-        
-        # Ensure output directory exists
-        self.config.output_dir.mkdir(parents=True, exist_ok=True)
-        
-    def _create_workflow_steps(self) -> List[WorkflowStep]:
-        """Create workflow steps based on configuration."""
-        steps = []
-        
-        # Step 1: Extract Audio (video only)
-        steps.append(WorkflowStep(
-            name="extract_audio",
-            enabled=self.config.extract_audio,
-            function=self._extract_audio_step,
-            settings={
-                "format": self.config.audio_format,
-                "quality": self.config.audio_quality
-            },
-            required_input_type="video"
-        ))
-        
-        # Step 2: Process Audio (video/audio only)
-        steps.append(WorkflowStep(
-            name="process_audio", 
-            enabled=self.config.process_audio,
-            function=self._process_audio_step,
-            settings={
-                "increase_volume": self.config.increase_volume,
-                "volume_gain_db": self.config.volume_gain_db,
-                "normalize_audio": self.config.normalize_audio,
-                "output_formats": self.config.output_formats
-            },
-            required_input_type=None  # Can run on video or audio
-        ))
-        
-        # Step 3: Transcribe (video/audio only)
-        steps.append(WorkflowStep(
-            name="transcribe",
-            enabled=self.config.transcribe,
-            function=self._transcribe_step,
-            settings={
-                "model": self.config.transcribe_model,
-                "language": self.config.language
-            },
-            required_input_type=None  # Can run on video or audio
-        ))
-        
-        # Step 4: Summarize (all file types)
-        steps.append(WorkflowStep(
-            name="summarize",
-            enabled=self.config.summarize,
-            function=self._summarize_step,
-            settings={
-                "template": self.config.summary_template,
-                "provider": self.config.provider,
-                "model": self.config.model,
-                "auto_detect_template": self.config.auto_detect_template
-            },
-            required_input_type=None  # Can run on any type
-        ))
-        
-        return steps
-    
+
     def execute(self, progress_callback: Optional[Callable[[int, int, str, str], None]] = None) -> Dict[str, Any]:
-        """Execute the workflow pipeline."""
+        """Execute the workflow pipeline.
+
+        Args:
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            Dictionary mapping step names to their results
+        """
         log.info(f"Starting workflow execution for {self.file_type} file: {self.config.input_file}")
-        
-        # Create workflow steps
-        steps = self._create_workflow_steps()
-        
+
+        # Create workflow steps using factory
+        steps = self._step_factory.create_steps(self.config, self.file_type)
+
         # Filter steps that can execute for this file type
-        executable_steps = [
-            step for step in steps 
-            if step.can_execute(self.file_type)
-        ]
-        
-        # Skip extract audio for audio files, skip both extract and transcribe for transcript files
+        executable_steps = self._step_factory.filter_executable_steps(steps, self.file_type)
+
+        # Pre-execution setup based on file type
         if self.file_type == "audio":
-            # Audio files don't need extraction
             self.current_audio_file = self.config.input_file
         elif self.file_type == "transcript":
-            # Transcript files don't need extraction or transcription
-            # Load existing transcript
             self._load_existing_transcript()
-        
+
         log.info(f"Executing {len(executable_steps)} workflow steps: {[s.name for s in executable_steps]}")
-        
-        # Execute steps
-        total_steps = len(executable_steps)
-        for i, step in enumerate(executable_steps):
-            try:
-                log.info(f"Executing step {i+1}/{total_steps}: {step.name}")
-                
-                if progress_callback:
-                    progress_callback(
-                        step=i+1,
-                        total=total_steps,
-                        step_name=step.name,
-                        status=f"Executing {step.name}..."
-                    )
-                
-                # Execute step
-                step_result = step.function(step.settings)
-                self.results[step.name] = step_result
-                
-                log.info(f"Completed step: {step.name}")
-                
-            except Exception as e:
-                error_msg = f"Error in step '{step.name}': {str(e)}"
-                log.error(error_msg)
-                raise SummeetsError(error_msg) from e
-        
-        if progress_callback:
-            progress_callback(
-                step=total_steps,
-                total=total_steps,
-                step_name="complete",
-                status="Workflow completed successfully"
-            )
-        
+
+        # Execute steps using executor
+        self.results = self._executor.execute_steps(executable_steps, progress_callback)
+
         log.info("Workflow execution completed successfully")
         return self.results
     

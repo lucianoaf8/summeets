@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Dict, Optional, Protocol
 from dataclasses import dataclass
 
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log
+)
 from ..utils.config import SETTINGS
 
 log = logging.getLogger(__name__)
@@ -90,7 +96,9 @@ class ReplicateTranscriber:
     
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_fixed(2),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        retry=retry_if_exception_type((ConnectionError, TimeoutError)),
+        before_sleep=before_sleep_log(log, logging.WARNING),
         reraise=True
     )
     def transcribe(
