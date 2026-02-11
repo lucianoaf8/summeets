@@ -4,7 +4,8 @@ Provides centralized service registration and resolution.
 Supports both singleton and transient lifetimes.
 """
 import logging
-from typing import Dict, Type, Optional, Any, Callable
+import threading
+from typing import Dict, Type, Any, Callable
 
 from .interfaces import (
     AudioProcessorInterface,
@@ -19,19 +20,23 @@ class ServiceContainer:
     """
     Dependency injection container for managing service instances.
 
+    Each instance has its own registrations, avoiding class-level mutable
+    state that leaks between tests or subclasses.
+
     Supports:
     - Singleton services (one instance shared)
     - Transient services (new instance per request)
     - Factory functions for deferred initialization
     """
 
-    _services: Dict[Type, Any] = {}
-    _factories: Dict[Type, Callable[[], Any]] = {}
-    _singletons: Dict[Type, Any] = {}
+    def __init__(self):
+        self._services: Dict[Type, Any] = {}
+        self._factories: Dict[Type, Callable[[], Any]] = {}
+        self._singletons: Dict[Type, Any] = {}
+        self._lock = threading.Lock()
 
-    @classmethod
     def register(
-        cls,
+        self,
         interface: Type,
         implementation: Type,
         singleton: bool = True
@@ -45,13 +50,12 @@ class ServiceContainer:
             singleton: If True, reuse same instance (default)
         """
         if singleton:
-            cls._services[interface] = implementation
+            self._services[interface] = implementation
         else:
-            cls._factories[interface] = implementation
+            self._factories[interface] = implementation
         log.debug(f"Registered {implementation.__name__} for {interface.__name__}")
 
-    @classmethod
-    def register_instance(cls, interface: Type, instance: Any) -> None:
+    def register_instance(self, interface: Type, instance: Any) -> None:
         """
         Register a pre-created service instance.
 
@@ -59,12 +63,11 @@ class ServiceContainer:
             interface: The abstract interface type
             instance: The instance to use
         """
-        cls._singletons[interface] = instance
+        self._singletons[interface] = instance
         log.debug(f"Registered instance for {interface.__name__}")
 
-    @classmethod
     def register_factory(
-        cls,
+        self,
         interface: Type,
         factory: Callable[[], Any]
     ) -> None:
@@ -75,11 +78,10 @@ class ServiceContainer:
             interface: The abstract interface type
             factory: Callable that creates the service
         """
-        cls._factories[interface] = factory
+        self._factories[interface] = factory
         log.debug(f"Registered factory for {interface.__name__}")
 
-    @classmethod
-    def resolve(cls, interface: Type) -> Any:
+    def resolve(self, interface: Type) -> Any:
         """
         Resolve a service by its interface.
 
@@ -92,53 +94,65 @@ class ServiceContainer:
         Raises:
             KeyError: If service not registered
         """
-        # Check for pre-created singleton
-        if interface in cls._singletons:
-            return cls._singletons[interface]
+        # Fast path: check for pre-created singleton (no lock needed)
+        if interface in self._singletons:
+            return self._singletons[interface]
 
-        # Check for registered implementation (singleton)
-        if interface in cls._services:
-            impl = cls._services[interface]
-            if interface not in cls._singletons:
-                cls._singletons[interface] = impl()
-            return cls._singletons[interface]
+        with self._lock:
+            # Double-check after acquiring lock
+            if interface in self._singletons:
+                return self._singletons[interface]
 
-        # Check for factory (transient)
-        if interface in cls._factories:
-            factory = cls._factories[interface]
-            if callable(factory) and isinstance(factory, type):
-                return factory()
+            # Check for registered implementation (singleton)
+            if interface in self._services:
+                impl = self._services[interface]
+                self._singletons[interface] = impl()
+                return self._singletons[interface]
+
+        # Check for factory (transient) - no lock needed
+        if interface in self._factories:
+            factory = self._factories[interface]
             return factory()
 
         raise KeyError(f"No service registered for {interface.__name__}")
 
-    @classmethod
-    def get_audio_processor(cls) -> AudioProcessorInterface:
+    def get_audio_processor(self) -> AudioProcessorInterface:
         """Get the registered audio processor service."""
-        return cls.resolve(AudioProcessorInterface)
+        return self.resolve(AudioProcessorInterface)
 
-    @classmethod
-    def get_transcriber(cls) -> TranscriberInterface:
+    def get_transcriber(self) -> TranscriberInterface:
         """Get the registered transcriber service."""
-        return cls.resolve(TranscriberInterface)
+        return self.resolve(TranscriberInterface)
 
-    @classmethod
-    def get_summarizer(cls) -> SummarizerInterface:
+    def get_summarizer(self) -> SummarizerInterface:
         """Get the registered summarizer service."""
-        return cls.resolve(SummarizerInterface)
+        return self.resolve(SummarizerInterface)
 
-    @classmethod
-    def reset(cls) -> None:
+    def reset(self) -> None:
         """Clear all registrations (useful for testing)."""
-        cls._services.clear()
-        cls._factories.clear()
-        cls._singletons.clear()
+        self._services.clear()
+        self._factories.clear()
+        self._singletons.clear()
 
-    @classmethod
-    def is_registered(cls, interface: Type) -> bool:
+    def is_registered(self, interface: Type) -> bool:
         """Check if a service is registered."""
         return (
-            interface in cls._services or
-            interface in cls._factories or
-            interface in cls._singletons
+            interface in self._services or
+            interface in self._factories or
+            interface in self._singletons
         )
+
+
+# Global default container instance
+_default_container = ServiceContainer()
+
+
+def get_container() -> ServiceContainer:
+    """Get the default service container."""
+    return _default_container
+
+
+def reset_container() -> None:
+    """Reset the default container (for testing)."""
+    global _default_container
+    _default_container = ServiceContainer()

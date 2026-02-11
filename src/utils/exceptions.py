@@ -2,6 +2,7 @@
 Centralized exception hierarchy and error handling patterns.
 Provides consistent error handling across the application.
 """
+import functools
 import logging
 import traceback
 from typing import Optional, Any, Dict
@@ -9,10 +10,10 @@ from pathlib import Path
 
 __all__ = [
     'SummeetsError', 'ValidationError', 'AudioProcessingError', 'AudioSelectionError',
-    'AudioCompressionError', 'TranscriptionError', 'APIError', 'ReplicateAPIError',
-    'LLMProviderError', 'OpenAIError', 'AnthropicError', 'FileOperationError',
-    'ConfigurationError', 'create_error_handler', 'sanitize_error_message',
-    'sanitize_path', 'log_and_reraise', 'safe_operation', 'ErrorContext',
+    'AudioCompressionError', 'CompressionError', 'TranscriptionError', 'APIError',
+    'ReplicateAPIError', 'LLMProviderError', 'OpenAIError', 'AnthropicError',
+    'FileOperationError', 'ConfigurationError', 'create_error_handler',
+    'sanitize_error_message', 'sanitize_path', 'log_and_reraise', 'safe_operation',
     'sanitize_log_message'
 ]
 
@@ -73,6 +74,9 @@ class AudioSelectionError(AudioProcessingError):
 class AudioCompressionError(AudioProcessingError):
     """Raised when audio compression fails."""
     pass
+
+# Backward-compatible alias
+CompressionError = AudioCompressionError
 
 
 class TranscriptionError(SummeetsError):
@@ -211,8 +215,9 @@ def sanitize_error_message(message: str) -> str:
         sanitized = re.sub(pattern, r'<path>/\1', sanitized)
 
     # Mask API keys that might appear in error messages
-    sanitized = re.sub(r'sk-[a-zA-Z0-9]{20,}', 'sk-***MASKED***', sanitized)
+    # Order matters: specific patterns (sk-ant-) must match before general (sk-)
     sanitized = re.sub(r'sk-ant-[a-zA-Z0-9]{20,}', 'sk-ant-***MASKED***', sanitized)
+    sanitized = re.sub(r'sk-[a-zA-Z0-9]{20,}', 'sk-***MASKED***', sanitized)
     sanitized = re.sub(r'r8_[a-zA-Z0-9]{20,}', 'r8_***MASKED***', sanitized)
 
     return sanitized
@@ -245,9 +250,10 @@ def sanitize_log_message(message: str) -> str:
     sanitized = sanitized.replace('\n', '\\n').replace('\r', '\\r')
 
     # Mask API keys and secrets
-    sanitized = re.sub(r'sk-[a-zA-Z0-9]{20,}', 'sk-***MASKED***', sanitized)
+    # Order matters: specific prefixes (sk-ant-, sk-proj-) must match before general (sk-)
     sanitized = re.sub(r'sk-ant-[a-zA-Z0-9]{20,}', 'sk-ant-***MASKED***', sanitized)
     sanitized = re.sub(r'sk-proj-[a-zA-Z0-9]{20,}', 'sk-proj-***MASKED***', sanitized)
+    sanitized = re.sub(r'sk-[a-zA-Z0-9]{20,}', 'sk-***MASKED***', sanitized)
     sanitized = re.sub(r'r8_[a-zA-Z0-9]{20,}', 'r8_***MASKED***', sanitized)
 
     # Mask AWS keys
@@ -341,47 +347,12 @@ def safe_operation(
         Decorator function
     """
     def decorator(func):
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
                 log_and_reraise(logger, e, operation_name, reraise_as)
-        
+
         return wrapper
     return decorator
-
-
-# Context manager for error handling
-class ErrorContext:
-    """
-    Context manager for handling errors in a specific operation.
-    """
-    
-    def __init__(
-        self,
-        operation: str,
-        logger: logging.Logger,
-        reraise_as: Optional[type] = None,
-        log_level: int = logging.ERROR
-    ):
-        """
-        Initialize error context.
-        
-        Args:
-            operation: Description of the operation
-            logger: Logger instance
-            reraise_as: Optional exception type to convert to
-            log_level: Logging level for errors
-        """
-        self.operation = operation
-        self.logger = logger
-        self.reraise_as = reraise_as or SummeetsError
-        self.log_level = log_level
-    
-    def __enter__(self):
-        return self
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            log_and_reraise(self.logger, exc_val, self.operation, self.reraise_as)
-        return False  # Don't suppress exceptions

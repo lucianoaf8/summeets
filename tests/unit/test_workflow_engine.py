@@ -491,10 +491,9 @@ class TestWorkflowSteps:
             assert result["reason"] == "Not a video file"
 
     @patch('src.workflow.increase_audio_volume')
-    @patch('src.workflow.normalize_loudness')
     @patch('src.workflow.convert_audio_format')
     @patch('src.workflow.get_data_manager')
-    def test_process_audio_step(self, mock_data_mgr, mock_convert, mock_normalize, mock_volume, tmp_path):
+    def test_process_audio_step(self, mock_data_mgr, mock_convert, mock_volume, tmp_path):
         """Test process audio workflow step."""
         audio_file = tmp_path / "input.mp3"
         audio_file.write_bytes(b"fake audio")
@@ -518,8 +517,6 @@ class TestWorkflowSteps:
         mock_data_mgr.return_value = mock_dm
 
         mock_volume.return_value = volume_file
-        # normalize_loudness doesn't return a value - it writes to output_path
-        mock_normalize.return_value = None
         mock_convert.return_value = converted_file
 
         with patch('src.utils.validation.validate_workflow_input') as mock_validate:
@@ -527,6 +524,11 @@ class TestWorkflowSteps:
 
             engine = WorkflowEngine(config)
             engine.current_audio_file = audio_file
+
+            # Mock the container's audio processor for normalize_loudness
+            from src.services.interfaces import AudioProcessorInterface
+            mock_audio_processor = Mock()
+            engine.container.register_instance(AudioProcessorInterface, mock_audio_processor)
 
             settings = {
                 "increase_volume": True,
@@ -543,7 +545,7 @@ class TestWorkflowSteps:
             assert any(f["type"] == "format_conversion" for f in result["processed_files"])
 
             mock_volume.assert_called_once()
-            mock_normalize.assert_called_once()
+            mock_audio_processor.normalize_loudness.assert_called_once()
             mock_convert.assert_called_once()
 
     @patch('src.workflow.transcribe_run')

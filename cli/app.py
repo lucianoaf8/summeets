@@ -113,7 +113,8 @@ def cmd_transcribe(
                         if audit_path.exists():
                             console.print(f"  Audit: [cyan]{audit_path}[/cyan]")
                         break
-        else:
+
+        elif file_type == "audio":
             # Direct transcription for audio files
             json_path, srt_path, audit_path = transcribe_audio(
                 audio_path=input_file,
@@ -123,6 +124,10 @@ def cmd_transcribe(
             console.print(f"  JSON: [cyan]{json_path}[/cyan]")
             console.print(f"  SRT: [cyan]{srt_path}[/cyan]")
             console.print(f"  Audit: [cyan]{audit_path}[/cyan]")
+
+        else:
+            console.print(f"[red]Unsupported file type for transcription: {file_type}[/red]")
+            raise typer.Exit(1)
 
     except ValidationError as e:
         console.print(f"[red]Validation Error: {e}[/red]")
@@ -245,10 +250,18 @@ def cmd_process(
     console.print("[bold]Starting complete processing pipeline[/bold]")
 
     try:
-        # Validate API keys on startup (need both transcription and summarization)
+        # Detect file type early to determine which API keys are needed
+        if input_file and input_file.exists():
+            file_type = detect_file_type(input_file)
+        else:
+            file_type = "unknown"
+
+        needs_transcription = file_type in ("video", "audio", "unknown")
+
+        # Validate API keys on startup (only require what's needed)
         try:
             check_startup_requirements(
-                require_transcription=True,
+                require_transcription=needs_transcription,
                 require_summarization=True,
                 provider=provider
             )

@@ -109,6 +109,11 @@ def _run_cleanup_handlers() -> None:
 def _signal_handler(signum: int, frame) -> None:
     """Handle shutdown signals (SIGINT, SIGTERM).
 
+    Sets the shutdown flag only. Actual cleanup runs via the atexit handler
+    (_atexit_cleanup) which is safe to call during interpreter shutdown.
+    Calling sys.exit() inside a signal handler risks deadlocks and double
+    cleanup when the atexit handler also fires.
+
     Args:
         signum: Signal number
         frame: Current stack frame
@@ -116,17 +121,8 @@ def _signal_handler(signum: int, frame) -> None:
     signal_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
     log.info(f"Received {signal_name}, initiating graceful shutdown...")
 
-    # Set shutdown flag
+    # Set shutdown flag; cleanup happens in _atexit_cleanup
     request_shutdown()
-
-    # Run cleanup
-    _run_cleanup_handlers()
-    _cleanup_temp_files()
-
-    log.info("Cleanup complete, exiting...")
-
-    # Exit cleanly
-    sys.exit(0)
 
 
 def install_signal_handlers() -> None:

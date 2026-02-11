@@ -14,11 +14,11 @@ from .utils.validation import validate_workflow_input, detect_file_type
 from .utils.exceptions import SummeetsError
 from .utils.config import SETTINGS
 from .utils.fsio import get_data_manager
+from .services import get_container, register_default_services
 from .audio.ffmpeg_ops import (
     extract_audio_from_video,
     increase_audio_volume,
     convert_audio_format,
-    normalize_loudness,
     ensure_wav16k_mono
 )
 from .transcribe.pipeline import run as transcribe_run
@@ -92,6 +92,10 @@ class WorkflowEngine:
         self.current_audio_file = None
         self.current_transcript = None
         self.results = {}
+
+        # Ensure services are registered and get container
+        register_default_services()
+        self.container = get_container()
 
         # Initialize components (allow injection for testing)
         self._validator = validator or WorkflowValidator()
@@ -209,10 +213,11 @@ class WorkflowEngine:
                 "gain_db": settings.get("volume_gain_db", 10.0)
             })
         
-        # Normalization
+        # Normalization (via service container)
         if settings.get("normalize_audio", True):
             norm_output = data_manager.get_audio_path(f"{base_name}_normalized", current_file.suffix[1:])
-            normalize_loudness(str(current_file), str(norm_output))
+            audio_processor = self.container.get_audio_processor()
+            audio_processor.normalize_loudness(current_file, norm_output)
             current_file = norm_output
             results["processed_files"].append({
                 "type": "normalization", 

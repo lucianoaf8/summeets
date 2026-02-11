@@ -17,13 +17,14 @@ from tenacity import (
     before_sleep_log
 )
 from ..utils.config import SETTINGS
+from ..utils.exceptions import TranscriptionError
 
 log = logging.getLogger(__name__)
 
 
 class ProgressCallback(Protocol):
     """Protocol for progress update callbacks."""
-    
+
     def __call__(self, message: str = "") -> None:
         """Update progress with optional message."""
         ...
@@ -32,16 +33,11 @@ class ProgressCallback(Protocol):
 @dataclass
 class TranscriptionConfig:
     """Configuration for transcription requests."""
-    
+
     model: str = "thomasmol/whisper-diarization"
     version: str = ""  # Empty means use latest
     max_retries: int = 3
     retry_delay: float = 2.0
-
-
-class TranscriptionError(Exception):
-    """Raised when transcription fails."""
-    pass
 
 
 class ReplicateTranscriber:
@@ -148,32 +144,48 @@ class ReplicateTranscriber:
     def _poll_prediction(
         self,
         prediction,
-        progress_callback: Optional[ProgressCallback] = None
+        progress_callback: Optional[ProgressCallback] = None,
+        max_wait_seconds: int = 3600
     ) -> Dict:
         """
-        Poll prediction until completion.
-        
+        Poll prediction until completion with timeout.
+
         Args:
             prediction: Replicate prediction object
             progress_callback: Optional progress callback
-            
+            max_wait_seconds: Maximum seconds to wait (default: 3600 = 1 hour)
+
         Returns:
             Prediction output
-            
+
         Raises:
-            TranscriptionError: If prediction fails
+            TranscriptionError: If prediction fails or times out
         """
-        if progress_callback:
-            progress_callback("Transcribing audio (this may take a while)...")
-        
-        while prediction.status not in ["succeeded", "failed", "canceled"]:
-            time.sleep(2)
-            # Use legacy approach: get fresh prediction object
-            prediction = self.client.predictions.get(prediction.id)
-            
+        def _safe_callback(message: str = ""):
+            """Call progress callback without letting exceptions crash transcription."""
             if progress_callback:
-                progress_callback()  # Update progress indicator
-        
+                try:
+                    progress_callback(message) if message else progress_callback()
+                except Exception as e:
+                    log.warning(f"Progress callback failed: {e}")
+
+        _safe_callback("Transcribing audio (this may take a while)...")
+
+        deadline = time.monotonic() + max_wait_seconds
+        poll_interval = 2
+
+        while prediction.status not in ["succeeded", "failed", "canceled"]:
+            if time.monotonic() >= deadline:
+                raise TranscriptionError(
+                    f"Transcription timed out after {max_wait_seconds}s. "
+                    f"Prediction {prediction.id} last status: {prediction.status}"
+                )
+
+            time.sleep(poll_interval)
+            prediction = self.client.predictions.get(prediction.id)
+
+            _safe_callback()
+
         if prediction.status == "succeeded":
             log.info("Transcription completed successfully")
             return prediction.output

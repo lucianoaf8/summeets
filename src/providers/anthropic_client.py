@@ -14,64 +14,39 @@ from tenacity import (
 from ..utils.config import SETTINGS
 from ..utils.exceptions import SummeetsError, AnthropicError
 from .base import LLMProvider, ProviderRegistry
+from .common import ClientCache, validate_api_key_format, chain_of_density_base
 
 log = logging.getLogger(__name__)
 
-_client: Optional[Anthropic] = None
-_last_api_key: Optional[str] = None
+_cache = ClientCache(
+    client_factory=lambda key: Anthropic(api_key=key),
+    key_getter=lambda: SETTINGS.anthropic_api_key,
+)
 
 
 def _validate_api_key(api_key: str) -> bool:
-    """
-    Validate Anthropic API key format.
-
-    Validates:
-    - Non-empty
-    - Starts with 'sk-ant-' prefix
-    - Minimum length of 30 characters
-    - Contains only valid characters (alphanumeric, hyphens, underscores)
-    """
-    import re
-
+    """Validate Anthropic API key format (sk-ant- prefix, min 30 chars)."""
     if not api_key:
         return False
-    if not api_key.startswith('sk-ant-'):
-        return False
-    if len(api_key) < 30:  # Minimum reasonable length
-        return False
-    # Validate character set (alphanumeric, hyphens, underscores)
-    if not re.match(r'^[a-zA-Z0-9_-]+$', api_key):
-        return False
-    return True
+    return validate_api_key_format(api_key, 'sk-ant-', 30)
 
 
 def client() -> Anthropic:
     """Get Anthropic client with proper lifecycle management and validation."""
-    global _client, _last_api_key
-
     current_api_key = SETTINGS.anthropic_api_key
 
-    # Validate API key
     if not _validate_api_key(current_api_key):
         raise AnthropicError("Invalid or missing Anthropic API key")
 
-    # Create new client if needed (first time or key changed)
-    if _client is None or _last_api_key != current_api_key:
-        try:
-            _client = Anthropic(api_key=current_api_key)
-            _last_api_key = current_api_key
-            log.debug("Anthropic client initialized")
-        except Exception as e:
-            raise AnthropicError(f"Failed to initialize Anthropic client: {e}", cause=e)
-
-    return _client
+    try:
+        return _cache.get()
+    except Exception as e:
+        raise AnthropicError(f"Failed to initialize Anthropic client: {e}", cause=e)
 
 
 def reset_client() -> None:
     """Reset the client cache (useful for testing or key rotation)."""
-    global _client, _last_api_key
-    _client = None
-    _last_api_key = None
+    _cache.reset()
 
 
 # Retry decorator for API calls
@@ -96,6 +71,8 @@ def summarize_chunks(chunks: list[str], sys_prompt: str, max_out_tokens: int) ->
                 system=sys_prompt,
                 messages=[{"role": "user", "content": ch}],
             )
+            if not msg.content:
+                raise AnthropicError("Anthropic returned empty content array")
             out.append(msg.content[0].text)
         except APIError as e:
             raise AnthropicError(f"Anthropic API error: {e}", cause=e)
@@ -133,25 +110,20 @@ def summarize_text(
 
     try:
         msg = client().messages.create(**message_params)
-        return msg.content[0].text
+        if not msg.content:
+            raise AnthropicError("Anthropic returned empty content array")
+        # With extended thinking, text blocks may not be first; find the text block
+        for block in msg.content:
+            if hasattr(block, 'text'):
+                return block.text
+        raise AnthropicError("Anthropic response contained no text content")
     except APIError as e:
         raise AnthropicError(f"Anthropic API error: {e}", cause=e)
 
 
 def chain_of_density_summarize(text: str, passes: int = 2) -> str:
     """Chain-of-Density iterative summarization using proven legacy methodology."""
-    from ..summarize.legacy_prompts import COD_PROMPT, SYSTEM_CORE
-
-    current = text
-    for pass_num in range(passes):
-        log.info(f"Chain-of-Density pass {pass_num + 1}/{passes}")
-        prompt = COD_PROMPT.format(current=current)
-        current = summarize_text(
-            prompt,
-            system_prompt=SYSTEM_CORE,
-            max_tokens=SETTINGS.summary_max_tokens
-        )
-    return current
+    return chain_of_density_base(text, summarize_text, passes)
 
 
 # Provider class implementation for the unified interface

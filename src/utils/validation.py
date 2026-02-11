@@ -380,8 +380,11 @@ def validate_transcript_file(path: Union[str, Path]) -> Path:
         raise ValidationError(f"Path is not a file: {path}")
     
     # Check file extension
-    if path.suffix.lower() != '.json':
-        raise ValidationError(f"Transcript file must be JSON format: {path}")
+    if path.suffix.lower() not in SUPPORTED_TRANSCRIPT_EXTENSIONS:
+        raise ValidationError(
+            f"Unsupported transcript format: {path.suffix}. "
+            f"Supported: {', '.join(sorted(SUPPORTED_TRANSCRIPT_EXTENSIONS))}"
+        )
     
     # Check file is readable
     if not os.access(path, os.R_OK):

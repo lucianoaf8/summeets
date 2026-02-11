@@ -16,6 +16,7 @@ import logging
 from typing import List, Dict, Protocol, Optional
 
 from ..utils.config import SETTINGS
+from ..utils.sanitization import sanitize_transcript_for_summary
 from ..providers import openai_client, anthropic_client
 
 log = logging.getLogger(__name__)
@@ -119,7 +120,7 @@ class MapReduceStrategy:
         for i, chunk in enumerate(chunks):
             log.info(f"Summarizing chunk {i+1}/{len(chunks)}")
 
-            chunk_text = format_chunk_text(chunk)
+            chunk_text = sanitize_transcript_for_summary(format_chunk_text(chunk))
             prompt = self.chunk_prompt_template.format(chunk=chunk_text)
 
             summary = call_llm(
@@ -190,7 +191,7 @@ class TemplateAwareStrategy:
         model: str
     ) -> str:
         """Process single chunk with template."""
-        transcript_text = self._format_transcript(chunk)
+        transcript_text = sanitize_transcript_for_summary(self._format_transcript(chunk))
         formatted = f"MEETING TRANSCRIPT:\n\n{transcript_text}"
 
         prompt = self.template_config.user_prompt_template.format(
@@ -220,7 +221,7 @@ class TemplateAwareStrategy:
         for i, chunk in enumerate(chunks):
             log.info(f"Processing chunk {i+1}/{len(chunks)}")
 
-            transcript_text = self._format_transcript(chunk)
+            transcript_text = sanitize_transcript_for_summary(self._format_transcript(chunk))
             prompt = (
                 "Extract requirements from this transcript chunk using the same "
                 f"structure as the full analysis:\n\n{transcript_text}"

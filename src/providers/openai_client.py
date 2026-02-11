@@ -15,64 +15,42 @@ from tenacity import (
 from ..utils.config import SETTINGS
 from ..utils.exceptions import SummeetsError, OpenAIError
 from .base import LLMProvider, ProviderRegistry
+from .common import ClientCache, validate_api_key_format, chain_of_density_base
 
 log = logging.getLogger(__name__)
 
-_client: Optional[OpenAI] = None
-_last_api_key: Optional[str] = None
+_cache = ClientCache(
+    client_factory=lambda key: OpenAI(api_key=key),
+    key_getter=lambda: SETTINGS.openai_api_key,
+)
 
 
 def _validate_api_key(api_key: str) -> bool:
-    """
-    Validate OpenAI API key format.
-
-    Validates:
-    - Non-empty
-    - Starts with 'sk-' or 'sk-proj-' prefix
-    - Minimum length of 20 characters
-    - Contains only valid characters (alphanumeric, hyphens, underscores)
-    """
-    import re
-
+    """Validate OpenAI API key format (sk- or sk-proj- prefix, min 20 chars)."""
     if not api_key:
         return False
-    if not (api_key.startswith('sk-') or api_key.startswith('sk-proj-')):
-        return False
-    if len(api_key) < 20:  # Minimum reasonable length
-        return False
-    # Validate character set (alphanumeric, hyphens, underscores)
-    if not re.match(r'^[a-zA-Z0-9_-]+$', api_key):
-        return False
-    return True
+    return (
+        validate_api_key_format(api_key, 'sk-', 20) or
+        validate_api_key_format(api_key, 'sk-proj-', 20)
+    )
 
 
 def client() -> OpenAI:
     """Get OpenAI client with proper lifecycle management and validation."""
-    global _client, _last_api_key
-
     current_api_key = SETTINGS.openai_api_key
 
-    # Validate API key
     if not _validate_api_key(current_api_key):
         raise OpenAIError("Invalid or missing OpenAI API key")
 
-    # Create new client if needed (first time or key changed)
-    if _client is None or _last_api_key != current_api_key:
-        try:
-            _client = OpenAI(api_key=current_api_key)
-            _last_api_key = current_api_key
-            log.debug("OpenAI client initialized")
-        except Exception as e:
-            raise OpenAIError(f"Failed to initialize OpenAI client: {e}", cause=e)
-
-    return _client
+    try:
+        return _cache.get()
+    except Exception as e:
+        raise OpenAIError(f"Failed to initialize OpenAI client: {e}", cause=e)
 
 
 def reset_client() -> None:
     """Reset the client cache (useful for testing or key rotation)."""
-    global _client, _last_api_key
-    _client = None
-    _last_api_key = None
+    _cache.reset()
 
 
 # Retry decorator for API calls
@@ -122,18 +100,7 @@ def summarize_text(text: str, system_prompt: str = None, max_tokens: int = None)
 
 def chain_of_density_summarize(text: str, passes: int = 2) -> str:
     """Chain-of-Density iterative summarization using proven legacy methodology."""
-    from ..summarize.legacy_prompts import COD_PROMPT, SYSTEM_CORE
-
-    current = text
-    for pass_num in range(passes):
-        log.info(f"Chain-of-Density pass {pass_num + 1}/{passes}")
-        prompt = COD_PROMPT.format(current=current)
-        current = summarize_text(
-            prompt,
-            system_prompt=SYSTEM_CORE,
-            max_tokens=SETTINGS.summary_max_tokens
-        )
-    return current
+    return chain_of_density_base(text, summarize_text, passes)
 
 
 @_retry_decorator

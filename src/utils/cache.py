@@ -230,18 +230,26 @@ class SmartCache:
             disk_path = self._get_disk_path(key)
             
             try:
-                # Use secure temp file for atomic write
-                with secure_temp_file(
+                # Write to temp file then atomically move to final location.
+                # Note: don't use secure_temp_file here because its __exit__
+                # would try to delete the file after we've already moved it.
+                import tempfile as _tempfile
+                fd, tmp_name = _tempfile.mkstemp(
                     suffix=".cache",
                     dir=self.config.cache_dir
-                ) as temp_path:
-                    with open(temp_path, 'w', encoding='utf-8') as f:
+                )
+                temp_path = Path(tmp_name)
+                try:
+                    os.chmod(tmp_name, 0o600)
+                    with os.fdopen(fd, 'w', encoding='utf-8') as f:
                         json.dump(entry.to_dict(), f, default=str)
-                    
-                    # Atomic move to final location
+                    # fd is now closed by os.fdopen context manager
                     temp_path.replace(disk_path)
                     log.debug(f"Stored in disk cache: {key[:8]}...")
-            
+                except BaseException:
+                    temp_path.unlink(missing_ok=True)
+                    raise
+
             except (OSError, json.JSONEncodeError) as e:
                 log.warning(f"Failed to write disk cache {key[:8]}...: {e}")
     

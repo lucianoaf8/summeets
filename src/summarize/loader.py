@@ -32,12 +32,24 @@ def load_transcript(transcript_path: Path) -> List[Dict]:
     if not transcript_path.exists():
         raise FileNotFoundError(f"Transcript not found: {transcript_path}")
 
+    suffix = transcript_path.suffix.lower()
+
     # Handle SRT files
-    if transcript_path.suffix.lower() == '.srt':
+    if suffix == '.srt':
         from ..transcribe.formatting import parse_srt_file
         return parse_srt_file(transcript_path)
 
-    # Handle JSON files
+    # Handle plain text files
+    if suffix == '.txt':
+        with open(transcript_path, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+        if not content:
+            log.warning("Empty transcript file: %s", transcript_path)
+            return []
+        # Wrap full text as a single segment
+        return [{"speaker": "UNKNOWN", "text": content, "start": 0.0, "end": 0.0}]
+
+    # Handle JSON files (default)
     with open(transcript_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
         # Handle both formats: direct array or {"segments": [...]}

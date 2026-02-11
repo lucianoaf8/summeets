@@ -105,11 +105,17 @@ class LLMSummarizer(SummarizerInterface):
 
 
 def register_default_services():
-    """Register default service implementations."""
-    from .container import ServiceContainer
+    """Register default service implementations (idempotent)."""
+    from .container import get_container
 
-    ServiceContainer.register(AudioProcessorInterface, FFmpegAudioProcessor)
-    ServiceContainer.register(TranscriberInterface, ReplicateTranscriberService)
-    ServiceContainer.register(SummarizerInterface, LLMSummarizer)
+    container = get_container()
+
+    # Skip if already registered
+    if container.is_registered(AudioProcessorInterface):
+        return
+
+    container.register(AudioProcessorInterface, FFmpegAudioProcessor)
+    container.register(TranscriberInterface, ReplicateTranscriberService)
+    container.register(SummarizerInterface, LLMSummarizer)
 
     log.debug("Default services registered")

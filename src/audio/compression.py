@@ -3,12 +3,13 @@ Audio compression utilities for upload optimization.
 Handles compressing audio files to fit within size limits.
 """
 import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import Optional
 
 from ..utils.config import SETTINGS
-from ..utils.exceptions import sanitize_path
+from ..utils.exceptions import sanitize_path, CompressionError
 from .ffmpeg_ops import run_cmd
 
 log = logging.getLogger(__name__)
@@ -16,11 +17,6 @@ log = logging.getLogger(__name__)
 # Default compression settings
 DEFAULT_MAX_MB = 24.0
 BITRATE_OPTIONS = [96, 64, 48, 32, 24, 16]  # kbps options to try
-
-
-class CompressionError(Exception):
-    """Raised when audio compression fails."""
-    pass
 
 
 def get_file_size_mb(file_path: Path) -> float:
@@ -96,9 +92,10 @@ def _compress_with_bitrate(input_path: Path, bitrate_k: int) -> Path:
     Raises:
         CompressionError: If compression command fails
     """
-    # Create temporary output file  
+    # Create temporary output file with restricted permissions
     with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
         output_path = Path(tmp.name)
+        os.chmod(tmp.name, 0o600)
     
     # Build ffmpeg command exactly like legacy
     cmd = [

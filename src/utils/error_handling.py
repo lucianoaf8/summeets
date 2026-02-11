@@ -197,66 +197,19 @@ def safe_file_operation(
         log_and_raise_error(f"{error_message}: Unexpected error - {e}", original_exception=e)
 
 
-def with_retry(
-    max_attempts: int = 3,
-    delay: float = 1.0,
-    backoff_multiplier: float = 2.0,
-    exceptions: tuple = (Exception,)
-) -> Callable:
-    """
-    Decorator for retrying operations with exponential backoff.
-    
-    Args:
-        max_attempts: Maximum number of retry attempts
-        delay: Initial delay between retries in seconds
-        backoff_multiplier: Multiplier for delay between retries
-        exceptions: Tuple of exceptions to catch and retry
-        
-    Returns:
-        Decorated function with retry logic
-    """
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> T:
-            import time
-            
-            current_delay = delay
-            last_exception = None
-            
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    if attempt == max_attempts - 1:
-                        # Last attempt, re-raise the exception
-                        raise
-                    
-                    log.warning(
-                        f"Attempt {attempt + 1}/{max_attempts} failed for {func.__name__}: {e}. "
-                        f"Retrying in {current_delay}s..."
-                    )
-                    time.sleep(current_delay)
-                    current_delay *= backoff_multiplier
-            
-            # This should never be reached, but just in case
-            if last_exception:
-                raise last_exception
-            
-        return wrapper
-    return decorator
-
-
 class ErrorContext:
     """
     Context manager for consistent error handling and logging.
-    
+
+    Uses the module-level logger and accepts arbitrary ``**context_vars``
+    for contextual error messages.
+
     Usage:
         with ErrorContext("processing audio file", file_path="audio.mp3"):
             # operations that might fail
             process_audio()
     """
-    
+
     def __init__(
         self,
         operation: str,
@@ -266,22 +219,22 @@ class ErrorContext:
         self.operation = operation
         self.log_level = log_level
         self.context_vars = context_vars
-    
+
     def __enter__(self):
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
             context_str = ""
             if self.context_vars:
                 context_parts = [f"{k}={v}" for k, v in self.context_vars.items()]
                 context_str = f" ({', '.join(context_parts)})"
-            
+
             error_msg = f"Error during {self.operation}{context_str}: {exc_val}"
             log.log(self.log_level, error_msg)
-            
+
             # Convert to SummeetsError if it's not already
             if not isinstance(exc_val, SummeetsError):
                 raise SummeetsError(error_msg) from exc_val
-        
+
         return False  # Don't suppress the exception

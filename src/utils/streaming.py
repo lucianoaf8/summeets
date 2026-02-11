@@ -8,7 +8,7 @@ Classes:
     ChunkedProcessor: Process data in memory-efficient chunks
 
 Functions:
-    stream_json_array: Stream large JSON arrays
+    load_json_array: Load and iterate over JSON arrays
     estimate_memory_usage: Estimate memory for processing
 """
 import json
@@ -44,10 +44,11 @@ def estimate_memory_usage(file_path: Path) -> float:
     return file_size_mb
 
 
-def stream_json_array(file_path: Path) -> Iterator[Dict[str, Any]]:
-    """Stream JSON array elements without loading entire file.
+def load_json_array(file_path: Path) -> Iterator[Dict[str, Any]]:
+    """Load a JSON file and yield its array elements.
 
-    Useful for large transcript files with many segments.
+    Despite the iterator return type, the entire file is read into memory.
+    Use ChunkedProcessor for true streaming on very large files.
 
     Args:
         file_path: Path to JSON file containing array
@@ -59,13 +60,11 @@ def stream_json_array(file_path: Path) -> Iterator[Dict[str, Any]]:
         Only works with JSON files containing a root array.
         For nested structures, use standard json.load().
     """
-    log.debug(f"Streaming JSON array from {file_path}")
+    log.debug(f"Loading JSON array from {file_path}")
 
     with open(file_path, 'r', encoding='utf-8') as f:
-        # Try to parse incrementally
         content = f.read()
 
-    # Parse once but yield elements
     try:
         data = json.loads(content)
         if isinstance(data, list):
@@ -79,6 +78,10 @@ def stream_json_array(file_path: Path) -> Iterator[Dict[str, Any]]:
     except json.JSONDecodeError as e:
         log.error(f"Failed to parse JSON: {e}")
         raise
+
+
+# Backward-compatible alias
+stream_json_array = load_json_array
 
 
 class ChunkedProcessor:

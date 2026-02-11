@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 from src.utils.error_handling import (
     handle_file_operation_errors, handle_api_errors, handle_validation_errors,
-    log_and_raise_error, safe_file_operation, with_retry, ErrorContext
+    log_and_raise_error, safe_file_operation, ErrorContext
 )
 from src.utils.exceptions import SummeetsError
 
@@ -234,73 +234,6 @@ class TestSafeFileOperation:
         assert result == 6
 
 
-class TestRetryDecorator:
-    """Test the retry decorator."""
-    
-    def test_successful_operation(self):
-        """Test decorator doesn't interfere with successful operations."""
-        @with_retry(max_attempts=3)
-        def successful_func():
-            return "success"
-        
-        result = successful_func()
-        assert result == "success"
-    
-    @patch('time.sleep')
-    def test_retry_with_recovery(self, mock_sleep):
-        """Test retry mechanism with eventual success."""
-        call_count = 0
-        
-        @with_retry(max_attempts=3, delay=0.1)
-        def sometimes_failing_func():
-            nonlocal call_count
-            call_count += 1
-            if call_count < 3:
-                raise ValueError("Temporary error")
-            return "success"
-        
-        result = sometimes_failing_func()
-        assert result == "success"
-        assert call_count == 3
-        assert mock_sleep.call_count == 2
-    
-    @patch('time.sleep')
-    def test_retry_exhaustion(self, mock_sleep):
-        """Test retry exhaustion with final exception."""
-        @with_retry(max_attempts=2, delay=0.1)
-        def always_failing_func():
-            raise ValueError("Persistent error")
-        
-        with pytest.raises(ValueError, match="Persistent error"):
-            always_failing_func()
-        
-        assert mock_sleep.call_count == 1
-    
-    @patch('time.sleep')
-    def test_exponential_backoff(self, mock_sleep):
-        """Test exponential backoff delays."""
-        @with_retry(max_attempts=3, delay=1.0, backoff_multiplier=2.0)
-        def always_failing_func():
-            raise ValueError("Error")
-        
-        with pytest.raises(ValueError):
-            always_failing_func()
-        
-        # Should sleep for 1.0, then 2.0
-        expected_calls = [pytest.approx(1.0), pytest.approx(2.0)]
-        actual_calls = [call[0][0] for call in mock_sleep.call_args_list]
-        assert actual_calls == expected_calls
-    
-    def test_specific_exceptions_only(self):
-        """Test that only specified exceptions are retried."""
-        @with_retry(max_attempts=3, exceptions=(ValueError,))
-        def mixed_errors_func():
-            raise TypeError("This should not be retried")
-        
-        with pytest.raises(TypeError):
-            mixed_errors_func()
-
-
 class TestErrorContext:
     """Test the ErrorContext context manager."""
     
@@ -367,24 +300,5 @@ class TestIntegrationScenarios:
         with pytest.raises(SummeetsError):
             file_operation_with_context()
     
-    @patch('time.sleep')
-    def test_retry_with_error_handling(self, mock_sleep):
-        """Test retry decorator with error handling."""
-        attempt_count = 0
-        
-        @with_retry(max_attempts=2, delay=0.1)
-        @handle_file_operation_errors("file operation")
-        def failing_file_operation():
-            nonlocal attempt_count
-            attempt_count += 1
-            raise FileNotFoundError("File not found")
-        
-        with pytest.raises(SummeetsError):
-            failing_file_operation()
-        
-        assert attempt_count == 2  # Should have retried once
-        assert mock_sleep.call_count == 1
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

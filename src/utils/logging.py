@@ -1,8 +1,8 @@
 from rich.logging import RichHandler
 import logging
+import logging.handlers
 import os
 from pathlib import Path
-from datetime import datetime
 
 from .exceptions import sanitize_log_message
 
@@ -43,6 +43,10 @@ class SanitizingFormatter(logging.Formatter):
     """
 
     def format(self, record: logging.LogRecord) -> str:
+        # Work on a shallow copy so other handlers see the original record
+        import copy
+        record = copy.copy(record)
+
         # Sanitize the message before formatting
         if record.msg:
             record.msg = sanitize_log_message(str(record.msg))
@@ -75,9 +79,10 @@ def setup_logging(level: int = None, log_file: bool = True) -> None:
     if log_file:
         log_dir = Path("logs")
         log_dir.mkdir(exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_handler = logging.FileHandler(
-            log_dir / f"summeets_{timestamp}.log",
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_dir / "summeets.log",
+            maxBytes=10 * 1024 * 1024,  # 10 MB
+            backupCount=5,
             encoding='utf-8'
         )
         file_handler.setLevel(level)

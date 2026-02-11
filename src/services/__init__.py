@@ -4,7 +4,7 @@ from .interfaces import (
     TranscriberInterface,
     SummarizerInterface,
 )
-from .container import ServiceContainer
+from .container import ServiceContainer, get_container, reset_container
 from .implementations import (
     FFmpegAudioProcessor,
     ReplicateTranscriberService,
@@ -17,6 +17,8 @@ __all__ = [
     "TranscriberInterface",
     "SummarizerInterface",
     "ServiceContainer",
+    "get_container",
+    "reset_container",
     "FFmpegAudioProcessor",
     "ReplicateTranscriberService",
     "LLMSummarizer",

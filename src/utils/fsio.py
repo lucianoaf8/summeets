@@ -111,6 +111,7 @@ class DataManager:
         fd, temp_path = tempfile.mkstemp(suffix=suffix, prefix=prefix, dir=self.temp_dir)
         import os
         os.close(fd)  # Close the file descriptor
+        os.chmod(temp_path, 0o600)  # Restrict permissions
         return Path(temp_path)
     
     def atomic_write(self, file_path: Path, content: Union[str, Dict, List], encoding: str = "utf-8"):
@@ -252,9 +253,25 @@ def create_output_filename(base_name: str, job_type: str, file_type: FileType, t
 # Global data manager instance
 _data_manager: Optional[DataManager] = None
 
+
 def get_data_manager(base_dir: Path = None) -> DataManager:
-    """Get global data manager instance."""
+    """Get or create the global data manager instance.
+
+    Raises ValueError if called with a different base_dir than the
+    existing instance to prevent silent misconfiguration.
+    """
     global _data_manager
     if _data_manager is None:
         _data_manager = DataManager(base_dir)
+    elif base_dir is not None and _data_manager.base_dir != base_dir:
+        raise ValueError(
+            f"DataManager already initialised with base_dir={_data_manager.base_dir}; "
+            f"requested base_dir={base_dir}. Call reset_data_manager() first."
+        )
     return _data_manager
+
+
+def reset_data_manager() -> None:
+    """Reset the global data manager (useful for testing)."""
+    global _data_manager
+    _data_manager = None

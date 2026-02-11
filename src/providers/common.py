@@ -5,6 +5,7 @@ to eliminate duplication between provider implementations.
 """
 import re
 import logging
+import threading
 from typing import Callable, TypeVar, Optional, Tuple
 
 from tenacity import (
@@ -91,22 +92,27 @@ class ClientCache:
         self._last_key: Optional[str] = None
         self._factory = client_factory
         self._key_getter = key_getter
+        self._lock = threading.Lock()
 
     def get(self):
-        """Get cached client, creating new one if needed."""
+        """Get cached client, creating new one if needed.
+
+        Thread-safe: uses a lock to prevent concurrent client creation.
+        """
         current_key = self._key_getter()
 
-        if self._client is None or self._last_key != current_key:
-            self._client = self._factory(current_key)
-            self._last_key = current_key
-            log.debug("Client initialized/refreshed")
-
-        return self._client
+        with self._lock:
+            if self._client is None or self._last_key != current_key:
+                self._client = self._factory(current_key)
+                self._last_key = current_key
+                log.debug("Client initialized/refreshed")
+            return self._client
 
     def reset(self) -> None:
         """Reset client cache."""
-        self._client = None
-        self._last_key = None
+        with self._lock:
+            self._client = None
+            self._last_key = None
 
 
 def chain_of_density_base(

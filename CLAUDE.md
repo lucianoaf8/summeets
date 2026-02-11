@@ -122,6 +122,10 @@ summeets/
 │  │  └─ replicate_api.py   # Replicate API integration
 │  ├─ summarize/            # Summarization pipeline
 │  │  └─ pipeline.py        # Map-reduce + COD summarization
+│  ├─ services/             # Dependency injection layer
+│  │  ├─ interfaces.py      # Abstract service contracts
+│  │  ├─ container.py       # Service container & resolution
+│  │  └─ implementations.py # Concrete service wrappers
 │  └─ utils/                # Utility modules
 │     ├─ config.py          # Pydantic settings management
 │     ├─ logging.py         # Structured logging setup
@@ -167,6 +171,25 @@ summeets/
 - **Configuration** (`src.utils.config`): Pydantic-based settings with environment variable support
 - **Job Management** (`src.utils.jobs`): State persistence and progress tracking
 - **Validation** (`src.utils.validation`): Input validation for video, audio, and transcript files
+- **Service Layer** (`src.services`): Dependency injection container (see below)
+
+### Service Layer / Dependency Injection
+
+The project uses a lightweight DI container for core services:
+
+- **Interfaces** (`src/services/interfaces.py`): `AudioProcessorInterface`, `TranscriberInterface`, `SummarizerInterface` — abstract contracts
+- **Implementations** (`src/services/implementations.py`): `FFmpegAudioProcessor`, `ReplicateTranscriberService`, `LLMSummarizer` — concrete wrappers around existing modules
+- **Container** (`src/services/container.py`): `ServiceContainer` with singleton/factory/instance registration, thread-safe resolution
+
+Usage pattern:
+```python
+from src.services import get_container, register_default_services
+register_default_services()  # idempotent
+container = get_container()
+audio = container.get_audio_processor()
+```
+
+Adoption status: `WorkflowEngine` uses the container for service initialization. CLI commands still call module-level functions directly for simple operations (probe, normalize).
 
 ### Data Models
 

@@ -1,16 +1,8 @@
 """Summary templates for different meeting types."""
-from enum import Enum
 from typing import Dict, List
 from dataclasses import dataclass
 
-
-class SummaryTemplate(str, Enum):
-    """Available summary templates."""
-    DEFAULT = "default"
-    SOP = "sop"
-    DECISION = "decision"
-    BRAINSTORM = "brainstorm"
-    REQUIREMENTS = "requirements"
+from ..models import SummaryTemplate
 
 
 @dataclass
@@ -266,59 +258,70 @@ def format_sop_output(summary: str, template_config: TemplateConfig) -> str:
 
 
 def detect_meeting_type(transcript_text: str) -> SummaryTemplate:
-    """Auto-detect meeting type based on content keywords."""
+    """Auto-detect meeting type based on content keywords.
+
+    Scores are normalized by keyword count to avoid bias toward
+    categories with more keywords.  Word-boundary matching prevents
+    false positives from substrings.
+    """
+    import re
+
     text_lower = transcript_text.lower()
-    
+
     # SOP/Process indicators
     sop_keywords = [
-        "step by step", "how to", "process", "procedure", "tutorial", 
+        "step by step", "how to", "process", "procedure", "tutorial",
         "training", "guide", "instruction", "configure", "setup",
         "install", "deploy", "walkthrough", "demonstration"
     ]
-    
-    # Decision meeting indicators  
+
+    # Decision meeting indicators
     decision_keywords = [
         "decision", "decide", "choose", "option", "alternative",
         "recommendation", "approve", "reject", "vote", "consensus"
     ]
-    
+
     # Brainstorming indicators
     brainstorm_keywords = [
         "idea", "brainstorm", "creative", "innovative", "concept",
         "suggestion", "possibility", "what if", "maybe we could"
     ]
-    
-    # Requirements indicators
+
+    # Requirements indicators (duplicates and overlaps removed)
     requirements_keywords = [
-        "requirement", "requirements", "specification", "specs", "criteria", 
+        "requirement", "requirements", "specification", "specs", "criteria",
         "must have", "should have", "need to", "necessary", "mandatory",
         "deliverable", "output", "report", "dashboard", "analysis",
         "data source", "field", "column", "format", "layout", "template",
         "calculation", "formula", "filter", "grouping", "breakdown",
-        "business rule", "logic", "workflow", "process", "integration",
+        "business rule", "logic", "workflow", "integration",
         "api", "database", "table", "query", "export", "import",
         "user access", "permission", "role", "authentication",
         "performance", "speed", "latency", "scalability", "volume",
         "compliance", "regulation", "audit", "security", "validation",
-        "deliverable", "timeline", "deadline", "milestone", "phase"
+        "timeline", "deadline", "milestone", "phase"
     ]
-    
-    # Count keyword occurrences
-    sop_score = sum(1 for keyword in sop_keywords if keyword in text_lower)
-    decision_score = sum(1 for keyword in decision_keywords if keyword in text_lower)
-    brainstorm_score = sum(1 for keyword in brainstorm_keywords if keyword in text_lower)
-    requirements_score = sum(1 for keyword in requirements_keywords if keyword in text_lower)
-    
-    # Return highest scoring type
+
+    def _score(keywords: list[str]) -> float:
+        """Return normalized score (matches / keyword count) using word boundaries."""
+        if not keywords:
+            return 0.0
+        matches = sum(
+            1 for kw in keywords
+            if re.search(r'\b' + re.escape(kw) + r'\b', text_lower)
+        )
+        return matches / len(keywords)
+
     scores = {
-        SummaryTemplate.SOP: sop_score,
-        SummaryTemplate.DECISION: decision_score, 
-        SummaryTemplate.BRAINSTORM: brainstorm_score,
-        SummaryTemplate.REQUIREMENTS: requirements_score
+        SummaryTemplate.SOP: _score(sop_keywords),
+        SummaryTemplate.DECISION: _score(decision_keywords),
+        SummaryTemplate.BRAINSTORM: _score(brainstorm_keywords),
+        SummaryTemplate.REQUIREMENTS: _score(requirements_keywords),
     }
-    
+
     max_score = max(scores.values())
-    if max_score >= 3:  # Minimum threshold
+    # Require at least ~20% keyword match to classify
+    if max_score >= 0.2:
         return max(scores, key=scores.get)
-    
+
     return SummaryTemplate.DEFAULT

@@ -286,6 +286,7 @@ class SecureConfigManager:
 
             with open(self.env_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines))
+            os.chmod(self.env_path, 0o600)
 
         except OSError as e:
             log.error(f"Failed to save .env: {e}")
@@ -341,10 +342,12 @@ class SecureConfigManager:
 
     @staticmethod
     def _mask_value(value: str) -> str:
-        """Mask a sensitive value for display."""
-        if len(value) <= 8:
-            return "*" * len(value)
-        return value[:4] + "*" * (len(value) - 8) + value[-4:]
+        """Mask a sensitive value for display.
+
+        Shows only provider prefix, never reveals suffix characters.
+        """
+        from .config import mask_api_key
+        return mask_api_key(value)
 
     def has_api_key(self, key_name: str) -> bool:
         """Check if an API key is configured."""

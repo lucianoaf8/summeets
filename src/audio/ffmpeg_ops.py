@@ -149,7 +149,7 @@ def ensure_wav16k_mono(input_path: Path) -> Path:
         _run_cmd(cmd)
         log.info(f"Converted to 16kHz mono WAV: {output_path}")
         return output_path
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+    except (RuntimeError, FileNotFoundError) as e:
         log.warning(f"FFmpeg conversion failed: {e}. Using original file.")
         return input_path
 
@@ -272,6 +272,45 @@ def probe_video_info(path: Path) -> Dict:
         return {}
 
 
+def _build_codec_args(format: str, quality: str = "medium") -> List[str]:
+    """Build FFmpeg codec/quality arguments for a given audio format.
+
+    Args:
+        format: Audio format (m4a, mp3, wav, flac, ogg)
+        quality: Quality tier (high, medium, low)
+
+    Returns:
+        List of FFmpeg CLI arguments for codec configuration
+
+    Raises:
+        ValueError: If format is unsupported
+    """
+    if format == "m4a":
+        bitrate = {
+            "high": SETTINGS.audio_quality_high_bitrate,
+            "medium": SETTINGS.audio_quality_medium_bitrate,
+            "low": SETTINGS.audio_quality_low_bitrate,
+        }.get(quality, SETTINGS.audio_quality_medium_bitrate)
+        return ["-c:a", "aac", "-b:a", bitrate]
+
+    if format == "mp3":
+        q = {"high": "0", "medium": "2", "low": "4"}.get(quality, "2")
+        return ["-c:a", "libmp3lame", "-q:a", q]
+
+    if format == "wav":
+        return ["-c:a", "pcm_s16le", "-ar", "48000"]
+
+    if format == "flac":
+        level = {"high": "8", "medium": "5", "low": "1"}.get(quality, "5")
+        return ["-c:a", "flac", "-compression_level", level]
+
+    if format == "ogg":
+        q = {"high": "6", "medium": "4", "low": "2"}.get(quality, "4")
+        return ["-c:a", "libvorbis", "-q:a", q]
+
+    raise ValueError(f"Unsupported format: {format}")
+
+
 def extract_audio_from_video(
     video_path: Path,
     output_path: Path,
@@ -296,7 +335,7 @@ def extract_audio_from_video(
         RuntimeError: If extraction fails
         ValueError: If format is unsupported
     """
-    # Validate format
+    # Validate format (also validated inside _build_codec_args)
     supported_formats = {"m4a", "mp3", "wav", "flac"}
     if format not in supported_formats:
         raise ValueError(f"Unsupported format: {format}. Supported: {supported_formats}")
@@ -312,33 +351,8 @@ def extract_audio_from_video(
         "-vn"  # No video
     ]
 
-    # Configure audio codec and quality based on format
-    if format == "m4a":
-        if quality == "high":
-            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_high_bitrate])
-        elif quality == "medium":
-            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_medium_bitrate])
-        else:  # low
-            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_low_bitrate])
-
-    elif format == "mp3":
-        if quality == "high":
-            cmd.extend(["-c:a", "libmp3lame", "-q:a", "0"])
-        elif quality == "medium":
-            cmd.extend(["-c:a", "libmp3lame", "-q:a", "2"])
-        else:  # low
-            cmd.extend(["-c:a", "libmp3lame", "-q:a", "4"])
-
-    elif format == "wav":
-        cmd.extend(["-c:a", "pcm_s16le", "-ar", "48000"])
-
-    elif format == "flac":
-        if quality == "high":
-            cmd.extend(["-c:a", "flac", "-compression_level", "8"])
-        elif quality == "medium":
-            cmd.extend(["-c:a", "flac", "-compression_level", "5"])
-        else:  # low
-            cmd.extend(["-c:a", "flac", "-compression_level", "1"])
+    # Configure audio codec and quality
+    cmd.extend(_build_codec_args(format, quality))
 
     # Add normalization filter if requested
     if normalize and format != "wav":  # Skip normalization for WAV to preserve quality
@@ -410,40 +424,8 @@ def convert_audio_format(
         "-i", str(input_path)
     ]
 
-    if format == "m4a":
-        if quality == "high":
-            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_high_bitrate])
-        elif quality == "medium":
-            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_medium_bitrate])
-        else:
-            cmd.extend(["-c:a", "aac", "-b:a", SETTINGS.audio_quality_low_bitrate])
-
-    elif format == "mp3":
-        if quality == "high":
-            cmd.extend(["-c:a", "libmp3lame", "-q:a", "0"])
-        elif quality == "medium":
-            cmd.extend(["-c:a", "libmp3lame", "-q:a", "2"])
-        else:
-            cmd.extend(["-c:a", "libmp3lame", "-q:a", "4"])
-
-    elif format == "ogg":
-        if quality == "high":
-            cmd.extend(["-c:a", "libvorbis", "-q:a", "6"])
-        elif quality == "medium":
-            cmd.extend(["-c:a", "libvorbis", "-q:a", "4"])
-        else:
-            cmd.extend(["-c:a", "libvorbis", "-q:a", "2"])
-
-    elif format == "flac":
-        if quality == "high":
-            cmd.extend(["-c:a", "flac", "-compression_level", "8"])
-        elif quality == "medium":
-            cmd.extend(["-c:a", "flac", "-compression_level", "5"])
-        else:
-            cmd.extend(["-c:a", "flac", "-compression_level", "1"])
-
-    else:
-        raise ValueError(f"Unsupported format: {format}")
+    # Configure audio codec and quality (raises ValueError for unsupported formats)
+    cmd.extend(_build_codec_args(format, quality))
 
     cmd.append(str(output_path))
 

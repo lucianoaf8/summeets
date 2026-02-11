@@ -8,6 +8,7 @@ from typing import List, Dict, Optional
 from datetime import datetime
 
 from ..utils.config import SETTINGS
+from ..utils.sanitization import sanitize_transcript_for_summary
 from ..models import SummaryTemplate
 from ..tokenizer import TokenBudget, plan_fit
 
@@ -71,7 +72,8 @@ def legacy_map_reduce_summarize(
     chunk_segments: List[List[Dict]],
     provider: str = None,
     model: str = None,
-    template_type: str = "DEFAULT"
+    template_type: str = "DEFAULT",
+    max_output_tokens: int = None
 ) -> str:
     """Legacy-proven map-reduce summarization with template-specific prompts."""
     provider = provider or SETTINGS.provider
@@ -88,7 +90,7 @@ def legacy_map_reduce_summarize(
     for i, chunk in enumerate(chunk_segments):
         log.info(f"Summarizing chunk {i+1}/{len(chunk_segments)}")
 
-        chunk_text = format_chunk_text(chunk)
+        chunk_text = sanitize_transcript_for_summary(format_chunk_text(chunk))
 
         if chunk_context:
             prompt = f"{chunk_context}\n\n{CHUNK_PROMPT.format(chunk=chunk_text)}"
@@ -120,12 +122,14 @@ def legacy_map_reduce_summarize(
     else:
         final_prompt = REDUCE_PROMPT.format(parts=parts_text)
 
+    effective_max_tokens = max_output_tokens or SETTINGS.summary_max_tokens
+
     _preflight_or_raise(
         provider=provider,
         model=model,
         system_prompt=system_prompt,
         user_prompt=final_prompt,
-        max_output_tokens=SETTINGS.summary_max_tokens,
+        max_output_tokens=effective_max_tokens,
         tag="reduce"
     )
 
@@ -133,7 +137,7 @@ def legacy_map_reduce_summarize(
         prompt=final_prompt,
         system_prompt=system_prompt,
         provider=provider,
-        max_tokens=SETTINGS.summary_max_tokens
+        max_tokens=effective_max_tokens
     )
 
     return final_summary
@@ -158,7 +162,8 @@ def run(
     cod_passes: int = None,
     output_dir: Path = None,
     template: SummaryTemplate = None,
-    auto_detect_template: bool = None
+    auto_detect_template: bool = None,
+    max_output_tokens: int = None
 ) -> tuple[Path, Path]:
     """Run the complete summarization pipeline.
 
@@ -171,6 +176,7 @@ def run(
         output_dir: Output directory (deprecated, uses data structure)
         template: Summary template to use
         auto_detect_template: Whether to auto-detect template
+        max_output_tokens: Override for max output tokens (avoids global mutation)
 
     Returns:
         Tuple of (json_path, md_path)
@@ -211,7 +217,8 @@ def run(
             chunk_segments,
             provider,
             model=model,
-            template_type=detected_template.value.upper()
+            template_type=detected_template.value.upper(),
+            max_output_tokens=max_output_tokens
         )
 
     # Chain-of-Density refinement (skip for structured templates)

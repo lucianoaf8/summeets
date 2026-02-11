@@ -1,10 +1,13 @@
 # tools/tokens_check.py
 import argparse
 import json
+import logging
 from pathlib import Path
 from ..tokenizer import TokenBudget, plan_fit
 from ..summarize.legacy_prompts import SYSTEM_CORE, CHUNK_PROMPT, REDUCE_PROMPT
 from ..summarize.legacy_prompts import format_chunk_text, format_partial_summaries
+
+log = logging.getLogger(__name__)
 
 def main():
     ap = argparse.ArgumentParser()
@@ -43,7 +46,7 @@ def main():
         prompt = CHUNK_PROMPT.format(chunk=chunk_text)
         messages = [{"role": "user", "content": prompt}]
         n, fits = plan_fit(args.provider, args.model, messages, budget, system=SYSTEM_CORE, encoding=args.encoding)
-        print(f"map[{i}] tokens={n}, fits={fits}")
+        log.debug(f"map[{i}] tokens={n}, fits={fits}")
 
     # reduce phase check (using synthesized partials)
     partials = []
@@ -53,7 +56,7 @@ def main():
     final_prompt = REDUCE_PROMPT.format(parts=parts_text)
     messages = [{"role": "user", "content": final_prompt}]
     n, fits = plan_fit(args.provider, args.model, messages, budget, system=SYSTEM_CORE, encoding=args.encoding)
-    print(f"reduce tokens={n}, fits={fits}")
+    log.debug(f"reduce tokens={n}, fits={fits}")
 
 if __name__ == "__main__":
     main()

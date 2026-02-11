@@ -193,6 +193,9 @@ def mask_api_key(api_key: str | None) -> str:
     """
     Mask an API key for safe display.
 
+    Shows only the provider prefix (e.g. ``sk-``, ``sk-ant-``, ``r8_``)
+    followed by ``***configured***``.  Never reveals suffix characters.
+
     Args:
         api_key: API key to mask
 
@@ -202,10 +205,13 @@ def mask_api_key(api_key: str | None) -> str:
     if not api_key:
         return "Not configured"
 
-    if len(api_key) <= 8:
-        return "*" * len(api_key)
+    # Identify known provider prefixes
+    for prefix in ("sk-ant-", "sk-proj-", "sk-", "r8_"):
+        if api_key.startswith(prefix):
+            return f"{prefix}***configured***"
 
-    return api_key[:4] + "*" * (len(api_key) - 8) + api_key[-4:]
+    # Unknown format – show nothing
+    return "***configured***"
 
 
 def get_configuration_summary() -> dict:
